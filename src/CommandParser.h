@@ -62,6 +62,13 @@ private:
     void handleSetPWMDutyRamped(ICommandResponse* response, float duty, uint32_t rampTimeMs);
     void handleSetRPMFilterSize(ICommandResponse* response, uint8_t size);
     void handleFilterStatus(ICommandResponse* response);
+
+    // WiFi and Web Server commands (WiFi Web Server feature)
+    void handleWiFiStatus(ICommandResponse* response);
+    void handleWiFiStart(ICommandResponse* response);
+    void handleWiFiStop(ICommandResponse* response);
+    void handleWiFiScan(ICommandResponse* response);
+    void handleWebStatus(ICommandResponse* response);
 };
 
 // CDC 回應實作

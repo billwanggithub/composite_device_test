@@ -4,6 +4,8 @@
 #include "MotorControl.h"
 #include "MotorSettings.h"
 #include "StatusLED.h"
+#include "WiFiManager.h"
+#include "WebServer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/queue.h"
@@ -24,6 +26,11 @@ extern SemaphoreHandle_t hidSendMutex;
 extern MotorControl motorControl;
 extern MotorSettingsManager motorSettingsManager;
 extern StatusLED statusLED;
+
+// WiFi and Web Server external variables (from main.cpp)
+extern WiFiManager wifiManager;
+extern WiFiSettingsManager wifiSettingsManager;
+extern WebServerManager webServerManager;
 
 CommandParser::CommandParser() {
 }
