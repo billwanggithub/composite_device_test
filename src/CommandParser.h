@@ -42,6 +42,20 @@ private:
     void handleSend(ICommandResponse* response);
     void handleRead(ICommandResponse* response);
     void handleClear(ICommandResponse* response);
+
+    // Motor control command handlers
+    void handleSetPWMFreq(ICommandResponse* response, uint32_t freq);
+    void handleSetPWMDuty(ICommandResponse* response, float duty);
+    void handleSetPolePairs(ICommandResponse* response, uint8_t pairs);
+    void handleSetMaxFreq(ICommandResponse* response, uint32_t maxFreq);
+    void handleSetMaxRPM(ICommandResponse* response, uint32_t maxRPM);
+    void handleSetLEDBrightness(ICommandResponse* response, uint8_t brightness);
+    void handleRPM(ICommandResponse* response);
+    void handleMotorStatus(ICommandResponse* response);
+    void handleMotorStop(ICommandResponse* response);
+    void handleSaveSettings(ICommandResponse* response);
+    void handleLoadSettings(ICommandResponse* response);
+    void handleResetSettings(ICommandResponse* response);
 };
 
 // CDC 回應實作

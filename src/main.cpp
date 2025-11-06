@@ -4,6 +4,8 @@
 #include "CustomHID.h"
 #include "CommandParser.h"
 #include "HIDProtocol.h"
+#include "MotorControl.h"
+#include "MotorSettings.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -66,6 +68,10 @@ BLEResponse* ble_response = nullptr;
 
 // HID 命令緩衝區
 String hid_command_buffer = "";
+
+// Motor control instances
+MotorControl motorControl;
+MotorSettingsManager motorSettingsManager;
 
 // BLE Server Callbacks
 class MyServerCallbacks: public BLEServerCallbacks {
@@ -315,12 +321,60 @@ void bleTask(void* parameter) {
     }
 }
 
+// Motor 處理 Task
+void motorTask(void* parameter) {
+    TickType_t lastRPMUpdate = 0;
+    TickType_t lastSafetyCheck = 0;
+
+    while (true) {
+        TickType_t now = xTaskGetTickCount();
+
+        // Update RPM reading
+        if (now - lastRPMUpdate >= pdMS_TO_TICKS(motorSettingsManager.get().rpmUpdateRate)) {
+            motorControl.updateRPM();
+            lastRPMUpdate = now;
+        }
+
+        // Safety check every 500ms
+        if (now - lastSafetyCheck >= pdMS_TO_TICKS(500)) {
+            if (!motorControl.checkSafety()) {
+                // Emergency stop triggered
+                if (xSemaphoreTake(serialMutex, pdMS_TO_TICKS(10))) {
+                    USBSerial.println("\n⚠️ SAFETY ALERT: Emergency stop activated!");
+                    xSemaphoreGive(serialMutex);
+                }
+                motorControl.emergencyStop();
+            }
+            lastSafetyCheck = now;
+        }
+
+        // Yield to other tasks
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
 void setup() {
     // ========== 步驟 1: 初始化 USB ==========
     USBSerial.begin();
     HID.begin();
     HID.onData(onHIDData);
     USB.begin();
+
+    // ========== 步驟 1.5: 初始化馬達控制 ==========
+    // Initialize motor settings manager
+    if (!motorSettingsManager.begin()) {
+        USBSerial.println("⚠️ Motor settings NVS initialization failed!");
+    }
+
+    // Load settings from NVS (or use defaults)
+    motorSettingsManager.load();
+
+    // Initialize motor control hardware
+    if (!motorControl.begin(&motorSettingsManager.get())) {
+        USBSerial.println("❌ Motor control initialization failed!");
+    } else {
+        USBSerial.println("✅ Motor control initialized successfully");
+    }
 
     // ========== 步驟 2: 創建 FreeRTOS 資源（必須在 BLE 初始化之前！）==========
     hidDataQueue = xQueueCreate(10, sizeof(HIDDataPacket));
@@ -351,17 +405,27 @@ void setup() {
 
     // ========== 步驟 5: 顯示歡迎訊息 ==========
     USBSerial.println("\n=================================");
-    USBSerial.println("多介面複合裝置 (FreeRTOS)");
+    USBSerial.println("ESP32-S3 馬達控制系統");
     USBSerial.println("=================================");
-    USBSerial.println("裝置資訊:");
-    USBSerial.println("  - USB CDC: 序列埠 console");
-    USBSerial.println("  - USB HID: 64 位元組（無 Report ID）");
-    USBSerial.println("  - BLE GATT: 命令介面");
-    USBSerial.println("  - 架構: FreeRTOS 多工處理");
-    USBSerial.println("\n統一命令介面：");
-    USBSerial.println("  所有介面使用相同的命令集");
-    USBSerial.println("  所有命令必須以換行符 (\\n) 結尾");
-    USBSerial.println("\n輸入 'HELP' 查看可用命令");
+    USBSerial.println("系統功能:");
+    USBSerial.println("  ✅ USB CDC 序列埠控制台");
+    USBSerial.println("  ✅ USB HID 自訂協定 (64 bytes)");
+    USBSerial.println("  ✅ BLE GATT 無線介面");
+    USBSerial.println("  ✅ PWM 馬達控制 (MCPWM)");
+    USBSerial.println("  ✅ 轉速計 RPM 量測");
+    USBSerial.println("  ✅ FreeRTOS 多工架構");
+    USBSerial.println("");
+    USBSerial.println("硬體配置:");
+    USBSerial.println("  GPIO 10: PWM 輸出");
+    USBSerial.println("  GPIO 11: 轉速計輸入");
+    USBSerial.println("  GPIO 12: 脈衝輸出");
+    USBSerial.println("");
+    USBSerial.printf("初始設定:\n");
+    USBSerial.printf("  PWM 頻率: %d Hz\n", motorSettingsManager.get().frequency);
+    USBSerial.printf("  PWM 占空比: %.1f%%\n", motorSettingsManager.get().duty);
+    USBSerial.printf("  極對數: %d\n", motorSettingsManager.get().polePairs);
+    USBSerial.println("");
+    USBSerial.println("輸入 'HELP' 查看所有命令");
     USBSerial.println("=================================");
 
     // ========== 步驟 6: 初始化 BLE（現在 mutex 已準備好）==========
@@ -435,10 +499,21 @@ void setup() {
         1                  // Core 1
     );
 
+    xTaskCreatePinnedToCore(
+        motorTask,         // Task 函數
+        "Motor_Task",      // Task 名稱
+        4096,              // Stack 大小
+        NULL,              // 參數
+        1,                 // 優先權（與 CDC 相同）
+        NULL,              // Task handle
+        1                  // Core 1
+    );
+
     USBSerial.println("[INFO] FreeRTOS Tasks 已啟動");
     USBSerial.println("[INFO] - HID Task (優先權 2)");
     USBSerial.println("[INFO] - CDC Task (優先權 1)");
     USBSerial.println("[INFO] - BLE Task (優先權 1)");
+    USBSerial.println("[INFO] - Motor Task (優先權 1)");
 }
 
 void loop() {
