@@ -6,6 +6,7 @@
 #include "HIDProtocol.h"
 #include "MotorControl.h"
 #include "MotorSettings.h"
+#include "StatusLED.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -72,6 +73,9 @@ String hid_command_buffer = "";
 // Motor control instances
 MotorControl motorControl;
 MotorSettingsManager motorSettingsManager;
+
+// Status LED instance
+StatusLED statusLED;
 
 // BLE Server Callbacks
 class MyServerCallbacks: public BLEServerCallbacks {
@@ -325,6 +329,7 @@ void bleTask(void* parameter) {
 void motorTask(void* parameter) {
     TickType_t lastRPMUpdate = 0;
     TickType_t lastSafetyCheck = 0;
+    TickType_t lastLEDUpdate = 0;
 
     while (true) {
         TickType_t now = xTaskGetTickCount();
@@ -344,8 +349,26 @@ void motorTask(void* parameter) {
                     xSemaphoreGive(serialMutex);
                 }
                 motorControl.emergencyStop();
+                // Set LED to blinking red (error)
+                statusLED.blinkRed(500);
             }
             lastSafetyCheck = now;
+        }
+
+        // Update LED based on motor state every 1 second
+        if (now - lastLEDUpdate >= pdMS_TO_TICKS(1000)) {
+            // Determine LED color based on motor state
+            if (bleDeviceConnected) {
+                // BLE connected - purple
+                statusLED.setPurple();
+            } else if (motorControl.getPWMDuty() > 0.1) {
+                // Motor running - blue
+                statusLED.setBlue();
+            } else {
+                // Motor idle - green
+                statusLED.setGreen();
+            }
+            lastLEDUpdate = now;
         }
 
         // Yield to other tasks
@@ -374,6 +397,14 @@ void setup() {
         USBSerial.println("❌ Motor control initialization failed!");
     } else {
         USBSerial.println("✅ Motor control initialized successfully");
+    }
+
+    // Initialize status LED
+    if (!statusLED.begin(48, motorSettingsManager.get().ledBrightness)) {
+        USBSerial.println("⚠️ Status LED initialization failed!");
+    } else {
+        // Show yellow blinking during initialization
+        statusLED.blinkYellow(200);
     }
 
     // ========== 步驟 2: 創建 FreeRTOS 資源（必須在 BLE 初始化之前！）==========
@@ -514,10 +545,17 @@ void setup() {
     USBSerial.println("[INFO] - CDC Task (優先權 1)");
     USBSerial.println("[INFO] - BLE Task (優先權 1)");
     USBSerial.println("[INFO] - Motor Task (優先權 1)");
+
+    // Set LED to green - system ready
+    statusLED.setGreen();
+    USBSerial.println("✅ System initialization complete - LED set to GREEN");
 }
 
 void loop() {
+    // Update status LED (for blink timing)
+    statusLED.update();
+
     // FreeRTOS Tasks 處理所有工作
     // loop() 保持空閒，讓 IDLE task 運行
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    vTaskDelay(pdMS_TO_TICKS(50));  // Reduced to 50ms for smoother LED blinking
 }
