@@ -5,8 +5,10 @@
 
 // 命令來源類型
 enum CommandSource {
-    CMD_SOURCE_CDC,    // CDC 序列埠
-    CMD_SOURCE_HID     // HID 介面
+    CMD_SOURCE_CDC,        // CDC 序列埠
+    CMD_SOURCE_HID,        // HID 介面
+    CMD_SOURCE_BLE,        // BLE GATT 介面
+    CMD_SOURCE_BT_SERIAL   // Bluetooth Serial (SPP)
 };
 
 // 命令回應介面
@@ -123,6 +125,32 @@ public:
 private:
     ICommandResponse* _channel1;
     ICommandResponse* _channel2;
+};
+
+// BLE 回應實作（透過 BLE GATT TX Characteristic）
+class BLEResponse : public ICommandResponse {
+public:
+    BLEResponse(void* ble_characteristic) : _characteristic(ble_characteristic) {}
+
+    void print(const char* str) override;
+    void println(const char* str) override;
+    void printf(const char* format, ...) override;
+
+private:
+    void* _characteristic;  // BLECharacteristic* (避免在 header 中引入 BLE 相依性)
+};
+
+// Bluetooth Serial 回應實作
+class BTSerialResponse : public ICommandResponse {
+public:
+    BTSerialResponse(void* bt_serial) : _btSerial(bt_serial) {}
+
+    void print(const char* str) override;
+    void println(const char* str) override;
+    void printf(const char* format, ...) override;
+
+private:
+    void* _btSerial;  // BluetoothSerial* (避免在 header 中引入 BT 相依性)
 };
 
 #endif // COMMAND_PARSER_H
