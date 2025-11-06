@@ -4,13 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an ESP32-S3 multi-interface console device implementation supporting USB, BLE, and Bluetooth Classic communication. The device provides a unified command interface accessible through four different protocols:
+This is an ESP32-S3 multi-interface console device implementation supporting USB and BLE communication. The device provides a unified command interface accessible through three different protocols:
 
 **Communication Interfaces:**
 - **USB CDC**: Serial console for command input/output
 - **USB HID**: 64-byte bidirectional custom protocol (no Report ID)
 - **BLE GATT**: Bluetooth Low Energy command interface with RX/TX characteristics
-- **Bluetooth Serial (SPP)**: Classic Bluetooth Serial Port Profile console
+
+**Important Note:** ESP32-S3 does **not** support Classic Bluetooth (BR/EDR) and therefore does not support Bluetooth Serial Port Profile (SPP). Only BLE (Bluetooth Low Energy) is available.
 
 **Hardware Platform:**
 - Board: ESP32-S3-DevKitC-1 N16R8
@@ -18,7 +19,7 @@ This is an ESP32-S3 multi-interface console device implementation supporting USB
 - Flash: 16 MB Quad SPI Flash
 - PSRAM: 8 MB Octal PSRAM
 - USB: USB OTG support
-- Bluetooth: BLE + Classic Bluetooth support
+- Bluetooth: BLE only (Classic Bluetooth not supported on ESP32-S3)
 
 ## Changing Board Variants
 
@@ -124,16 +125,15 @@ build_flags =
 **Important:** The TinyUSB HID buffer size flags are set to 128 to provide sufficient buffer space, though the actual data payload is 64 bytes.
 
 ### Bluetooth Mode Requirements
-The `platformio.ini` includes these build flags for Bluetooth functionality:
+The `platformio.ini` includes these build flags for BLE functionality:
 ```ini
 build_flags =
     -DCONFIG_BT_ENABLED=1
     -DCONFIG_BLUEDROID_ENABLED=1
     -DCONFIG_BT_BLE_ENABLED=1
-    -DCONFIG_BT_CLASSIC_ENABLED=1
 ```
 
-These flags enable both BLE and Classic Bluetooth support on ESP32-S3. The Bluetooth stack runs independently from USB and can operate simultaneously.
+**Important:** ESP32-S3 only supports BLE (Bluetooth Low Energy). Classic Bluetooth (BR/EDR) is **not available** on this chip. Do not use `-DCONFIG_BT_CLASSIC_ENABLED=1` flag as it has no effect. The BLE stack runs independently from USB and can operate simultaneously.
 
 ### DTR Signal Dependency
 The CDC serial interface (`USBSerial`) requires DTR (Data Terminal Ready) to be enabled in the serial terminal. Without DTR:
@@ -154,13 +154,12 @@ This is intentional behavior to ensure reliable data reception and should be mai
 ### Architecture Overview
 
 **Multi-Interface Design:**
-- Four independent communication interfaces: USB CDC + USB HID + BLE GATT + Bluetooth Serial
+- Three independent communication interfaces: USB CDC + USB HID + BLE GATT
 - Unified command system: All interfaces can send the same text commands
 - Response routing:
   - CDC commands → CDC response only
   - HID commands → CDC + HID response (dual channel)
   - BLE commands → BLE + CDC response (dual channel)
-  - BT Serial commands → BT Serial + CDC response (dual channel)
 
 **FreeRTOS Multi-Tasking Architecture:**
 This implementation uses FreeRTOS to separate concerns and ensure thread-safe operation:
@@ -177,17 +176,12 @@ This implementation uses FreeRTOS to separate concerns and ensure thread-safe op
    - Accumulates characters into command buffer
    - Processes CDC commands via CommandParser with CDCResponse
 
-3. **BT Serial Task** (`btSerialTask`, Priority 1, Core 1)
-   - Polls Bluetooth Serial input
-   - Accumulates characters into command buffer
-   - Processes BT Serial commands via CommandParser with MultiChannelResponse
-
-4. **BLE GATT** (Event-driven callbacks)
+3. **BLE GATT** (Event-driven callbacks)
    - BLE RX Characteristic write callback processes commands
    - Sends responses via BLE TX Characteristic (Notify)
    - Processed via CommandParser with MultiChannelResponse
 
-5. **IDLE Task** (Arduino `loop()`)
+4. **IDLE Task** (Arduino `loop()`)
    - Minimal work, yields to FreeRTOS scheduler
 
 **Synchronization Mechanisms:**
@@ -206,9 +200,6 @@ HID Task Context:
 
 CDC Task Context:
   USBSerial.read() → CommandParser → CDCResponse (with serialMutex)
-
-BT Serial Task Context:
-  SerialBT.read() → CommandParser → MultiChannelResponse
 
 BLE Callback Context:
   onWrite() → CommandParser → MultiChannelResponse (BLE + CDC)
@@ -244,29 +235,24 @@ The initialization order in `setup()` is critical:
 - Start BLE advertising
 - `BLEResponse` - For BLE responses
 
-**4. Bluetooth Serial Initialization:**
-- `SerialBT.begin("ESP32_S3_BT_Console")` - Initialize Bluetooth Serial (SPP)
-- `BTSerialResponse` - For Bluetooth Serial responses
-
-**5. Wait for USB Connection:**
+**4. Wait for USB Connection:**
 - Wait for `USBSerial` connection (max 5s timeout)
 - Display welcome message
 
-**6. Create FreeRTOS Resources:**
+**5. Create FreeRTOS Resources:**
 - `hidDataQueue` - Queue for HID data packets (10 deep)
 - `serialMutex` - Mutex for USBSerial protection
 - `bufferMutex` - Mutex for hid_out_buffer protection
 - `hidSendMutex` - Mutex for HID.send() protection
 
-**7. Create FreeRTOS Tasks:**
+**6. Create FreeRTOS Tasks:**
 - `hidTask` (Priority 2, 4KB stack, Core 1)
 - `cdcTask` (Priority 1, 4KB stack, Core 1)
-- `btSerialTask` (Priority 1, 4KB stack, Core 1)
 
 **Notes:**
 - All communication interfaces are available immediately after initialization
-- FreeRTOS tasks must be created after USB/BLE/BT initialization
-- All tasks run on Core 1 to avoid conflicts with Arduino WiFi/BT on Core 0
+- FreeRTOS tasks must be created after USB/BLE initialization
+- All tasks run on Core 1 to avoid conflicts with Arduino WiFi/BLE on Core 0
 - BLE uses event-driven callbacks (no dedicated task required)
 
 ### HID Communication
@@ -360,29 +346,24 @@ The system uses a unified command parser (`CommandParser.h/cpp`) that handles co
   - Format: Plain text
   - Data sent via BLE GATT Notify mechanism
   - Maximum data size per notification: 512 bytes (BLE MTU dependent)
-- `BTSerialResponse`: Implements response through Bluetooth Serial
-  - Format: Plain text with newline (`\n`)
-  - Similar to CDC but over Bluetooth SPP
 - `MultiChannelResponse`: Outputs to multiple channels simultaneously
-  - Used for HID, BLE, and BT Serial to also send to CDC for debugging
+  - Used for HID and BLE to also send to CDC for debugging
 
 **Command Processing Flow:**
 1. **CDC Path**: `cdcTask()` → `feedChar()` → `processCommand()` → `CDCResponse` (CDC only)
 2. **HID Path**: `hidTask()` → `processCommand()` → `MultiChannelResponse` (CDC + HID)
 3. **BLE Path**: `onWrite()` callback → `processCommand()` → `MultiChannelResponse` (CDC + BLE)
-4. **BT Serial Path**: `btSerialTask()` → `feedChar()` → `processCommand()` → `MultiChannelResponse` (CDC + BT Serial)
-5. All commands are case-insensitive
-6. Commands must end with newline (`\n` or `\r`)
-7. **No echo**: Input commands are NOT echoed to the terminal
+4. All commands are case-insensitive
+5. Commands must end with newline (`\n` or `\r`)
+6. **No echo**: Input commands are NOT echoed to the terminal
 
 **Response Routing:**
 
-| Command Source | CDC Response | HID Response | BLE Response | BT Serial Response |
-|---------------|-------------|-------------|-------------|-------------------|
-| CDC           | ✓ Yes       | ✗ No        | ✗ No        | ✗ No              |
-| HID           | ✓ Yes       | ✓ Yes       | ✗ No        | ✗ No              |
-| BLE           | ✓ Yes       | ✗ No        | ✓ Yes       | ✗ No              |
-| BT Serial     | ✓ Yes       | ✗ No        | ✗ No        | ✓ Yes             |
+| Command Source | CDC Response | HID Response | BLE Response |
+|---------------|-------------|-------------|-------------|
+| CDC           | ✓ Yes       | ✗ No        | ✗ No        |
+| HID           | ✓ Yes       | ✓ Yes       | ✗ No        |
+| BLE           | ✓ Yes       | ✗ No        | ✓ Yes       |
 
 **Available Commands:**
 - `*IDN?` - SCPI standard identification (returns device ID only, no command echo)
@@ -399,9 +380,11 @@ The system uses a unified command parser (`CommandParser.h/cpp`) that handles co
 3. Use `response->print()`, `response->println()`, or `response->printf()` to output
 4. Response automatically routes to correct interface based on command source
 
-## BLE and Bluetooth Serial Communication
+## BLE Communication
 
 ### BLE GATT Service
+
+**Important:** ESP32-S3 only supports BLE (Bluetooth Low Energy). Classic Bluetooth and SPP are not available on this chip.
 
 **Service Configuration:**
 - Device Name: `ESP32_S3_Console`
@@ -434,41 +417,12 @@ The system uses a unified command parser (`CommandParser.h/cpp`) that handles co
 5. Write commands to RX Characteristic (must end with `\n`)
 6. Receive responses via TX Characteristic notifications
 
-### Bluetooth Serial (SPP)
-
-**Configuration:**
-- Device Name: `ESP32_S3_BT_Console`
-- Protocol: Bluetooth Classic Serial Port Profile (SPP)
-- Baud Rate: Not applicable (Bluetooth handles flow control)
-
-**Usage:**
-1. Pair with device "ESP32_S3_BT_Console" from your computer/phone
-2. Connect via Bluetooth Serial terminal application
-3. Send commands ending with newline (`\n`)
-4. Receive responses as plain text
-
-**Task Implementation:**
-- Dedicated `btSerialTask` polls `SerialBT.available()`
-- Character-by-character processing via `CommandParser::feedChar()`
-- Responses sent to both BT Serial and CDC (for debugging)
-
-**Platform-Specific Tools:**
-- **Windows**: Use Bluetooth COM port with PuTTY, TeraTerm, or similar
-- **Linux**: Use `rfcomm` to bind and `screen` or `minicom` to connect
-- **macOS**: Use `screen /dev/tty.ESP32_S3_BT_Console`
-- **Android/iOS**: Use Bluetooth Serial terminal apps
-
 ### Important Notes
 
-**Bluetooth Coexistence:**
-- ESP32-S3 supports BLE and Classic Bluetooth running simultaneously
-- Both interfaces share the same Bluetooth radio
-- No special configuration needed for coexistence
-
-**USB vs Bluetooth:**
-- USB and Bluetooth can be used simultaneously on ESP32-S3
+**USB vs BLE:**
+- USB and BLE can be used simultaneously on ESP32-S3
 - USB CDC provides the primary debug console
-- BLE and BT Serial provide wireless command interfaces
+- BLE provides wireless command interface
 - All commands are logged to USB CDC console regardless of source
 
 **Security Considerations:**
@@ -476,8 +430,8 @@ The system uses a unified command parser (`CommandParser.h/cpp`) that handles co
 - Suitable for development and testing environments
 - For production, consider adding:
   - BLE bonding and encryption
-  - Bluetooth PIN pairing
   - Command authentication
+  - Encrypted characteristics
 
 ## HID 64-Byte Limitation and Solution
 
