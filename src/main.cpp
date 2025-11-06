@@ -32,9 +32,6 @@ bool bleOldDeviceConnected = false;
 // Queue for pending BLE notifications; stores heap-allocated char* messages
 QueueHandle_t bleNotifyQueue = nullptr;
 
-// Classic Bluetooth Serial (SPP) is not available on ESP32-S3; BLE GATT is used
-// for console/serial functionality instead.
-
 // HID 資料結構
 typedef struct {
     uint8_t data[64];
@@ -59,7 +56,6 @@ CDCResponse* cdc_response = nullptr;
 HIDResponse* hid_response = nullptr;
 MultiChannelResponse* multi_response = nullptr;  // 多通道回應（同時輸出到 HID 和 CDC）
 BLEResponse* ble_response = nullptr;
-// BTSerialResponse is removed as Bluetooth Serial is not used anymore
 
 // HID 命令緩衝區
 String hid_command_buffer = "";
@@ -203,18 +199,36 @@ void hidTask(void* parameter) {
     }
 }
 
-// No BT Serial task on ESP32-S3
-
 // CDC 處理 Task
 void cdcTask(void* parameter) {
     String cdc_command_buffer = "";
 
     while (true) {
-        // 處理 CDC 輸入
-        while (USBSerial.available()) {
-            char c = USBSerial.read();
+        // 檢查是否有可用資料（使用 mutex 保護）
+        int available = 0;
+        if (xSemaphoreTake(serialMutex, pdMS_TO_TICKS(100))) {
+            available = USBSerial.available();
+            xSemaphoreGive(serialMutex);
+        }
 
-            // 累積字元到緩衝區（不需要 mutex，因為只有這個 task 存取 cdc_command_buffer）
+        // 處理 CDC 輸入
+        while (available > 0) {
+            char c = 0;
+
+            // 讀取單個字元（使用 mutex 保護）
+            if (xSemaphoreTake(serialMutex, pdMS_TO_TICKS(100))) {
+                if (USBSerial.available()) {
+                    c = USBSerial.read();
+                    available = USBSerial.available();  // 更新剩餘可用資料數量
+                } else {
+                    available = 0;  // 沒有資料了
+                }
+                xSemaphoreGive(serialMutex);
+            } else {
+                break;  // 無法獲取 mutex，跳出迴圈
+            }
+
+            // 處理接收到的字元（在 mutex 外部，不影響其他 task）
             if (c == '\n' || c == '\r') {
                 // 收到換行符，處理完整命令
                 if (cdc_command_buffer.length() > 0) {
@@ -227,9 +241,6 @@ void cdcTask(void* parameter) {
                         // 顯示提示符
                         USBSerial.print("> ");
                         xSemaphoreGive(serialMutex);
-                    } else {
-                        // Mutex 獲取失敗，稍後重試
-                        USBSerial.println("[ERROR] 無法獲取 mutex");
                     }
                 }
             } else if (c == '\b' || c == 127) {
@@ -248,25 +259,56 @@ void cdcTask(void* parameter) {
     }
 }
 
-// Bluetooth Serial (SPP) removed — no BT Serial task
-
 void setup() {
-    // 初始化 USB CDC
+    // ========== 步驟 1: 初始化 USB ==========
     USBSerial.begin();
-
-    // 初始化自訂 HID（64 位元組，無 Report ID）
     HID.begin();
     HID.onData(onHIDData);
-
-    // 啟動 USB
     USB.begin();
 
-    // 創建回應物件
+    // ========== 步驟 2: 創建 FreeRTOS 資源（必須在 BLE 初始化之前！）==========
+    hidDataQueue = xQueueCreate(10, sizeof(HIDDataPacket));
+    serialMutex = xSemaphoreCreateMutex();
+    bufferMutex = xSemaphoreCreateMutex();
+    hidSendMutex = xSemaphoreCreateMutex();
+    bleNotifyQueue = xQueueCreate(32, sizeof(char*));
+
+    // 檢查資源創建是否成功
+    if (!hidDataQueue || !serialMutex || !bufferMutex || !hidSendMutex || !bleNotifyQueue) {
+        // 如果資源創建失敗，進入無限迴圈（需要重啟）
+        while (true) {
+            delay(1000);
+        }
+    }
+
+    // ========== 步驟 3: 創建回應物件 ==========
     cdc_response = new CDCResponse(USBSerial);
     hid_response = new HIDResponse(&HID);
     multi_response = new MultiChannelResponse(cdc_response, hid_response);
 
-    // 初始化 BLE
+    // ========== 步驟 4: 等待 USB 連接（在 BLE 初始化之前）==========
+    unsigned long start = millis();
+    while (!USBSerial && (millis() - start < 5000)) {
+        delay(100);
+    }
+
+    // ========== 步驟 5: 顯示歡迎訊息 ==========
+    USBSerial.println("\n=================================");
+    USBSerial.println("多介面複合裝置 (FreeRTOS)");
+    USBSerial.println("=================================");
+    USBSerial.println("裝置資訊:");
+    USBSerial.println("  - USB CDC: 序列埠 console");
+    USBSerial.println("  - USB HID: 64 位元組（無 Report ID）");
+    USBSerial.println("  - BLE GATT: 命令介面");
+    USBSerial.println("  - 架構: FreeRTOS 多工處理");
+    USBSerial.println("\n統一命令介面：");
+    USBSerial.println("  所有介面使用相同的命令集");
+    USBSerial.println("  所有命令必須以換行符 (\\n) 結尾");
+    USBSerial.println("\n輸入 'HELP' 查看可用命令");
+    USBSerial.println("=================================");
+
+    // ========== 步驟 6: 初始化 BLE（現在 mutex 已準備好）==========
+    USBSerial.println("[INFO] 正在初始化 BLE...");
     BLEDevice::init("ESP32_S3_Console");
     pBLEServer = BLEDevice::createServer();
     pBLEServer->setCallbacks(new MyServerCallbacks());
@@ -296,48 +338,14 @@ void setup() {
     pAdvertising->setMinPreferred(0x0);
     BLEDevice::startAdvertising();
 
-    // Create queue for pending BLE notifications (store char* pointers)
-    // Capacity: 32 messages
-    bleNotifyQueue = xQueueCreate(32, sizeof(char*));
-    if (!bleNotifyQueue) {
-        USBSerial.println("[WARN] 無法建立 bleNotifyQueue；暫時訊息將被丟棄");
-    }
-
     // 創建 BLE 回應物件
     ble_response = new BLEResponse(pTxCharacteristic);
 
-
-    // 等待 USB 連接（最多 5 秒）
-    unsigned long start = millis();
-    while (!USBSerial && (millis() - start < 5000)) {
-        delay(100);
-    }
-
-    // 顯示歡迎訊息
-    USBSerial.println("\n=================================");
-    USBSerial.println("多介面複合裝置 (FreeRTOS)");
-    USBSerial.println("=================================");
-    USBSerial.println("裝置資訊:");
-    USBSerial.println("  - USB CDC: 序列埠 console");
-    USBSerial.println("  - USB HID: 64 位元組（無 Report ID）");
-    USBSerial.println("  - BLE GATT: 命令介面");
-        USBSerial.println("  - Bluetooth Serial: not available on ESP32-S3 (use BLE)");
-    USBSerial.println("  - 架構: FreeRTOS 多工處理");
-    USBSerial.println("\n統一命令介面：");
-    USBSerial.println("  所有介面使用相同的命令集");
-    USBSerial.println("  所有命令必須以換行符 (\\n) 結尾");
+    USBSerial.println("[INFO] BLE 初始化完成");
     USBSerial.println("\nBluetooth 資訊:");
     USBSerial.println("  BLE 裝置名稱: ESP32_S3_Console");
-    USBSerial.println("  BT Serial 名稱: ESP32_S3_BT_Console");
-    USBSerial.println("\n輸入 'HELP' 查看可用命令");
     USBSerial.println("=================================");
     USBSerial.print("\n> ");
-
-    // 創建 FreeRTOS 資源
-    hidDataQueue = xQueueCreate(10, sizeof(HIDDataPacket));  // 10 個封包的佇列
-    serialMutex = xSemaphoreCreateMutex();
-    bufferMutex = xSemaphoreCreateMutex();
-    hidSendMutex = xSemaphoreCreateMutex();  // HID 發送互斥鎖
 
     // 創建 FreeRTOS Tasks
     xTaskCreatePinnedToCore(
@@ -360,12 +368,9 @@ void setup() {
         1                  // Core 1
     );
 
-    // No BT Serial task on ESP32-S3
-
     USBSerial.println("[INFO] FreeRTOS Tasks 已啟動");
     USBSerial.println("[INFO] - HID Task (優先權 2)");
     USBSerial.println("[INFO] - CDC Task (優先權 1)");
-    USBSerial.println("[INFO] - BT Serial Task (優先權 1)");
     USBSerial.println("[INFO] - BLE 透過 callback 處理");
 }
 

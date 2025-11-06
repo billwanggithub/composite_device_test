@@ -23,7 +23,11 @@
       "Bash(move:*)",
       "Bash(tasklist:*)",
       "Bash(findstr:*)",
-      "Bash(else echo \"沒有 null 檔案需要刪除\")"
+      "Bash(else echo \"沒有 null 檔案需要刪除\")",
+      "Bash(pio device:*)",
+      "Bash(chcp 65001)",
+      "Bash(PYTHONIOENCODING=utf-8 python:*)",
+      "Bash(bash:*)"
     ],
     "deny": [],
     "ask": []

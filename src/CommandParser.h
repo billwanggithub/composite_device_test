@@ -139,9 +139,4 @@ private:
     void* _characteristic;  // BLECharacteristic* (避免在 header 中引入 BLE 相依性)
 };
 
-// Bluetooth Serial 回應實作
-// Note: Classic Bluetooth SPP (BluetoothSerial) is not supported on ESP32-S3.
-// BLE GATT is used for serial/console transport instead. No BTSerialResponse
-// is provided here to avoid depending on Classic BT symbols.
-
 #endif // COMMAND_PARSER_H

@@ -132,7 +132,6 @@ void CommandParser::handleHelp(ICommandResponse* response) {
     response->println("  - USB CDC (序列埠)");
     response->println("  - USB HID (64位元組自訂協定)");
     response->println("  - BLE GATT (低功耗藍牙)");
-    // Classic Bluetooth Serial (SPP) is not available on ESP32-S3; use BLE GATT instead
     response->println("");
     response->println("所有命令必須以換行符結尾");
 }
@@ -166,7 +165,6 @@ void CommandParser::handleInfo(ICommandResponse* response) {
     response->println("  USB CDC: 已啟用");
     response->println("  USB HID: 64 位元組（無 Report ID）");
     response->println("  BLE GATT: 已啟用");
-    response->println("  BT Serial: 未啟用 (ESP32-S3 不支援 Classic SPP)");
 }
 
 void CommandParser::handleStatus(ICommandResponse* response) {
@@ -332,6 +330,3 @@ void BLEResponse::printf(const char* format, ...) {
     va_end(args);
     print(buffer);
 }
-
-// BTSerialResponse 實作
-// Classic BT SPP support is intentionally omitted for ESP32-S3 builds.
