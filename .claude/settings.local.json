@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(nul)",
+      "Bash(pio run:*)",
+      "Bash(pip install:*)",
+      "Bash(python:*)",
+      "Bash(if [ -f null ])",
+      "Bash(then rm null)",
+      "Bash(else echo \"找不到 null 檔案\")",
+      "Bash(fi)",
+      "Bash(timeout /t 5)",
+      "Bash(pio device monitor:*)",
+      "Bash(chmod:*)",
+      "Bash(./cleanup_null.sh)",
+      "Bash(timeout /t 3)",
+      "Bash(del test_hid_protocol.py test_hid_pywinusb.py test_cdc_serial.py test_auto.py)",
+      "Bash(ping:*)",
+      "Bash(if [ -f \"D:\\Documents\\PlatformIO\\Projects\\composite_device_tets\\nul\" ])",
+      "Bash(then rm \"D:\\Documents\\PlatformIO\\Projects\\composite_device_tets\\nul\")",
+      "Bash(./hidapitester.exe:*)",
+      "Bash(move:*)",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)",
+      "Bash(else echo \"沒有 null 檔案需要刪除\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

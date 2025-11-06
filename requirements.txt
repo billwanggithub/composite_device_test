@@ -1,0 +1,6 @@
+# Python 依賴套件
+# 安裝方式: pip install -r requirements.txt
+
+pyserial>=3.5
+pywinusb>=0.4.2  # Windows HID library（推薦）
+# hidapi>=0.14.0  # 備選（需要編譯，可能安裝失敗）
