@@ -214,14 +214,32 @@ void cdcTask(void* parameter) {
         while (USBSerial.available()) {
             char c = USBSerial.read();
 
-            // 取得 mutex 保護 USBSerial 輸出
-            if (xSemaphoreTake(serialMutex, pdMS_TO_TICKS(100))) {
-                // 使用命令解析器處理字元（CDC 命令只輸出到 CDC）
-                if (parser.feedChar(c, cdc_command_buffer, cdc_response, CMD_SOURCE_CDC)) {
-                    // 命令已處理，顯示提示符
-                    USBSerial.print("\n> ");
+            // 累積字元到緩衝區（不需要 mutex，因為只有這個 task 存取 cdc_command_buffer）
+            if (c == '\n' || c == '\r') {
+                // 收到換行符，處理完整命令
+                if (cdc_command_buffer.length() > 0) {
+                    // 取得 mutex 保護 USBSerial 輸出
+                    if (xSemaphoreTake(serialMutex, pdMS_TO_TICKS(1000))) {
+                        // 處理命令（CDC 命令只輸出到 CDC）
+                        parser.processCommand(cdc_command_buffer, cdc_response, CMD_SOURCE_CDC);
+                        cdc_command_buffer = "";  // 清空緩衝區
+
+                        // 顯示提示符
+                        USBSerial.print("> ");
+                        xSemaphoreGive(serialMutex);
+                    } else {
+                        // Mutex 獲取失敗，稍後重試
+                        USBSerial.println("[ERROR] 無法獲取 mutex");
+                    }
                 }
-                xSemaphoreGive(serialMutex);
+            } else if (c == '\b' || c == 127) {
+                // 退格鍵
+                if (cdc_command_buffer.length() > 0) {
+                    cdc_command_buffer.remove(cdc_command_buffer.length() - 1);
+                }
+            } else if (c >= 32 && c < 127) {
+                // 可列印字元
+                cdc_command_buffer += c;
             }
         }
 
