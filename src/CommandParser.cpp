@@ -3,6 +3,7 @@
 #include "HIDProtocol.h"
 #include "MotorControl.h"
 #include "MotorSettings.h"
+#include "StatusLED.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/queue.h"
@@ -22,6 +23,7 @@ extern SemaphoreHandle_t hidSendMutex;
 // Motor control external variables (from main.cpp)
 extern MotorControl motorControl;
 extern MotorSettingsManager motorSettingsManager;
+extern StatusLED statusLED;
 
 CommandParser::CommandParser() {
 }
@@ -453,7 +455,15 @@ void CommandParser::handleSetMaxRPM(ICommandResponse* response, uint32_t maxRPM)
 
 void CommandParser::handleSetLEDBrightness(ICommandResponse* response, uint8_t brightness) {
     motorSettingsManager.get().ledBrightness = brightness;
-    response->printf("✅ LED 亮度設定為: %d\n", brightness);
+
+    // Apply brightness to LED hardware immediately
+    if (statusLED.isInitialized()) {
+        statusLED.setBrightness(brightness);
+        response->printf("✅ LED 亮度設定為: %d (已立即套用)\n", brightness);
+    } else {
+        response->printf("✅ LED 亮度設定為: %d (LED 未初始化)\n", brightness);
+    }
+
     response->println("ℹ️ 使用 SAVE 命令儲存設定");
 }
 
