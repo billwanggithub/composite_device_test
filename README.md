@@ -126,34 +126,34 @@ pip install pyserial pywinusb
 
 **快速測試所有功能：**
 ```bash
-python test_all.py
+python scripts/test_all.py
 ```
 
 **測試 CDC 介面：**
 ```bash
-python test_cdc.py
+python scripts/test_cdc.py
 ```
 
 **測試 HID 介面（純文本協定）：**
 ```bash
-python test_hid.py test
+python scripts/test_hid.py test
 ```
 
 **測試 HID 介面（0xA1 協定）：**
 ```bash
-python test_hid.py test-0xa1
+python scripts/test_hid.py test-0xa1
 ```
 
 **互動模式：**
 ```bash
 # CDC 互動模式
-python test_cdc.py interactive
+python scripts/test_cdc.py interactive
 
 # HID 互動模式（純文本）
-python test_hid.py interactive
+python scripts/test_hid.py interactive
 
 # HID 互動模式（0xA1 協定）
-python test_hid.py interactive-0xa1
+python scripts/test_hid.py interactive-0xa1
 ```
 
 ## 📡 可用命令
@@ -362,9 +362,11 @@ composite_device_test/
 │   ├── CommandParser.h/cpp   # 統一命令解析器
 │   ├── HIDProtocol.h/cpp     # HID 協定處理
 │   └── ...
-├── test_hid.py               # HID 測試腳本
-├── test_cdc.py               # CDC 測試腳本
-├── test_all.py               # 整合測試腳本
+├── scripts/
+│   ├── test_hid.py           # HID 測試腳本
+│   ├── test_cdc.py           # CDC 測試腳本
+│   ├── test_all.py           # 整合測試腳本
+│   └── ble_client.py         # BLE GATT 測試客戶端
 ├── requirements.txt          # Python 依賴套件清單
 ├── platformio.ini            # PlatformIO 配置
 ├── README.md                 # 本文件
@@ -428,10 +430,18 @@ Quick example (install bleak first):
 
 ```powershell
 pip install bleak
+
+# Scan for available BLE devices
+python scripts/ble_client.py --scan
+
+# Connect by device name
 python scripts/ble_client.py --name ESP32_S3_Console
+
+# Connect by address (if known)
+python scripts/ble_client.py --address XX:XX:XX:XX:XX:XX
 ```
 
-See `scripts/ble_client.py` for details and options (you can also pass `--address`).
+See `scripts/ble_client.py` for details and options.
 
 ### Mobile testing with nRF Connect (Android / iOS)
 

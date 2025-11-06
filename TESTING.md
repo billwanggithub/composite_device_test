@@ -68,7 +68,7 @@ COMX
 
 專案包含三個主要測試腳本：
 
-### 1. test_hid.py - HID 介面測試工具
+### 1. scripts/test_hid.py - HID 介面測試工具
 
 **功能：**
 - 支援兩種協定：純文字和 0xA1 協定
@@ -81,31 +81,31 @@ COMX
 **使用方式：**
 ```bash
 # 顯示說明
-python test_hid.py
+python scripts/test_hid.py
 
 # 列出所有 HID 裝置
-python test_hid.py list
+python scripts/test_hid.py list
 
 # 發送單個命令（純文字協定）
-python test_hid.py cmd *IDN?
+python scripts/test_hid.py cmd *IDN?
 
 # 測試所有命令（純文字協定）
-python test_hid.py test
+python scripts/test_hid.py test
 
 # 測試所有命令（0xA1 協定）
-python test_hid.py test-0xa1
+python scripts/test_hid.py test-0xa1
 
 # 發送原始資料
-python test_hid.py send 12 34 56 78
+python scripts/test_hid.py send 12 34 56 78
 
 # 互動模式（純文字協定）
-python test_hid.py interactive
+python scripts/test_hid.py interactive
 
 # 互動模式（0xA1 協定）
-python test_hid.py interactive-0xa1
+python scripts/test_hid.py interactive-0xa1
 
 # 接收資料模式
-python test_hid.py receive
+python scripts/test_hid.py receive
 ```
 
 **互動模式指令：**
@@ -117,7 +117,7 @@ python test_hid.py receive
 
 **範例：**
 ```bash
-$ python test_hid.py interactive-0xa1
+$ python scripts/test_hid.py interactive-0xa1
 
 === HID 互動模式（0xA1 協定）===
 輸入命令（或 'q' 離開，'protocol' 切換協定）：
@@ -140,7 +140,7 @@ $ python test_hid.py interactive-0xa1
     ...
 ```
 
-### 2. test_cdc.py - CDC 介面測試工具
+### 2. scripts/test_cdc.py - CDC 介面測試工具
 
 **功能：**
 - 自動掃描並找到 ESP32-S3 的 CDC 序列埠
@@ -151,16 +151,16 @@ $ python test_hid.py interactive-0xa1
 **使用方式：**
 ```bash
 # 自動掃描並測試（預設行為）
-python test_cdc.py
+python scripts/test_cdc.py
 
 # 列出所有 COM ports
-python test_cdc.py list
+python scripts/test_cdc.py list
 
 # 僅測試命令
-python test_cdc.py test
+python scripts/test_cdc.py test
 
 # 直接進入互動模式
-python test_cdc.py interactive
+python scripts/test_cdc.py interactive
 ```
 
 **預期輸出：**
@@ -186,7 +186,7 @@ python test_cdc.py interactive
   ...
 ```
 
-### 3. test_all.py - 整合測試工具
+### 3. scripts/test_all.py - 整合測試工具
 
 **功能：**
 - 同時測試 CDC 和 HID 介面
@@ -197,16 +197,16 @@ python test_cdc.py interactive
 **使用方式：**
 ```bash
 # 測試 CDC 和 HID（預設）
-python test_all.py
+python scripts/test_all.py
 
 # 僅測試 CDC 介面
-python test_all.py cdc
+python scripts/test_all.py cdc
 
 # 僅測試 HID 介面
-python test_all.py hid
+python scripts/test_all.py hid
 
 # 明確測試多通道回應
-python test_all.py both
+python scripts/test_all.py both
 ```
 
 **預期輸出：**
@@ -259,6 +259,72 @@ ESP32-S3 整合測試工具
 ✅ 所有介面正常運作
 ✅ 多通道回應功能已驗證
 ```
+
+### 4. scripts/ble_client.py - BLE GATT 測試工具
+
+**功能：**
+- 掃描所有可用的 BLE 裝置
+- 連接到 ESP32-S3 的 BLE GATT 服務
+- 通過 RX characteristic 發送命令
+- 通過 TX characteristic 接收回應
+- 互動模式（可輸入任意命令）
+
+**準備工作：**
+```bash
+pip install bleak
+```
+
+**使用方式：**
+```bash
+# 掃描所有 BLE 裝置
+python scripts/ble_client.py --scan
+
+# 通過裝置名稱連接
+python scripts/ble_client.py --name ESP32_S3_Console
+
+# 通過 MAC 位址連接（如果已知）
+python scripts/ble_client.py --address XX:XX:XX:XX:XX:XX
+```
+
+**掃描輸出範例：**
+```
+Scanning for BLE devices (timeout: 8.0s)...
+============================================================
+Found 5 device(s):
+------------------------------------------------------------
+1. Name: ESP32_S3_Console
+   Address: XX:XX:XX:XX:XX:XX
+   RSSI: -45 dBm
+
+2. Name: <Unknown>
+   Address: YY:YY:YY:YY:YY:YY
+   RSSI: -67 dBm
+...
+============================================================
+```
+
+**互動模式範例：**
+連接成功後，您可以直接輸入命令（命令會自動添加換行符）：
+```
+Connected to XX:XX:XX:XX:XX:XX
+Subscribed to TX notifications. Type lines and press Enter to send to RX characteristic.
+
+*IDN?
+HID_ESP32_S3
+
+INFO
+=== ESP32-S3 裝置資訊 ===
+硬體規格:
+  型號: ESP32-S3-DevKitC-1 N16R8
+  晶片: ESP32-S3
+  ...
+```
+
+**重要提示：**
+- ESP32-S3 **僅支援 BLE**（Bluetooth Low Energy）
+- **不支援** Classic Bluetooth (BR/EDR) 或 SPP (Serial Port Profile)
+- BLE GATT 提供無線命令介面，與 USB CDC/HID 使用相同的命令集
+- BLE 連接時，回應會同時輸出到 BLE 和 USB CDC（多通道功能）
 
 ## 測試命令列表
 

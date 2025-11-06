@@ -2,8 +2,9 @@
 Simple BLE client for the project's BLE GATT "serial" console.
 
 Usage:
-  python scripts/ble_client.py --name ESP32_S3_Console
-  python scripts/ble_client.py --address AA:BB:CC:DD:EE:FF
+  python scripts/ble_client.py --scan                        # Scan for BLE devices
+  python scripts/ble_client.py --name ESP32_S3_Console       # Connect by name
+  python scripts/ble_client.py --address AA:BB:CC:DD:EE:FF   # Connect by address
 
 The client will:
  - connect to the device by name or address
@@ -24,6 +25,26 @@ from bleak import BleakScanner, BleakClient
 SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 CHAR_UUID_RX = "beb5483e-36e1-4688-b7f5-ea07361b26a8"  # write
 CHAR_UUID_TX = "beb5483e-36e1-4688-b7f5-ea07361b26a9"  # notify
+
+async def scan_devices(timeout=8.0):
+    """Scan for all BLE devices and display them"""
+    print(f"Scanning for BLE devices (timeout: {timeout}s)...")
+    print("=" * 60)
+    devices = await BleakScanner.discover(timeout=timeout)
+
+    if not devices:
+        print("No BLE devices found.")
+        return
+
+    print(f"Found {len(devices)} device(s):")
+    print("-" * 60)
+    for i, d in enumerate(devices, 1):
+        name = d.name if d.name else "<Unknown>"
+        print(f"{i}. Name: {name}")
+        print(f"   Address: {d.address}")
+        print(f"   RSSI: {d.rssi} dBm")
+        print()
+    print("=" * 60)
 
 async def scan_for_name(name, timeout=8.0):
     devices = await BleakScanner.discover(timeout=timeout)
@@ -87,11 +108,17 @@ async def run(address=None, name=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="BLE serial test client")
+    parser.add_argument("--scan", action="store_true", help="Scan for BLE devices and exit")
     parser.add_argument("--name", help="BLE device name to scan for (substring match)")
     parser.add_argument("--address", help="BLE device address (skip scanning)")
     args = parser.parse_args()
 
     try:
-        asyncio.run(run(address=args.address, name=args.name))
+        if args.scan:
+            # Just scan and display devices
+            asyncio.run(scan_devices())
+        else:
+            # Connect to device
+            asyncio.run(run(address=args.address, name=args.name))
     except Exception as e:
         print(f"Error: {e}")

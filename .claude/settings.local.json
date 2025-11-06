@@ -27,7 +27,11 @@
       "Bash(pio device:*)",
       "Bash(chcp 65001)",
       "Bash(PYTHONIOENCODING=utf-8 python:*)",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "Bash(if [ -f \"nul\" ])",
+      "Bash(then rm \"nul\")",
+      "Bash(else echo \"nul 檔案不存在\")",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

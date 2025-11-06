@@ -1,7 +1,12 @@
-# Enable Bluetooth (Classic + BLE) and Bluedroid SPP
-# These Kconfig options are suggestions; adjust if your SDK version uses different names.
+# BLE (Bluetooth Low Energy) configuration for ESP32-S3
+# NOTE: ESP32-S3 does NOT support Classic Bluetooth (BR/EDR) or SPP
+# Only BLE (Bluetooth Low Energy) is available on this chip
+
 CONFIG_BT_ENABLED=y
 CONFIG_BLUEDROID_ENABLED=y
-CONFIG_BT_SPP_ENABLED=y
-CONFIG_BTDM_CONTROLLER_MODE_BR_EDR_ONLY=y
-CONFIG_BTDM_CTRL_BR_EDR_SMP=y
+CONFIG_BT_BLE_ENABLED=y
+
+# USB configuration (handled by platformio.ini build flags)
+# CONFIG_TINYUSB_HID_BUFSIZE=128
+# CONFIG_ARDUINO_USB_MODE=1
+# CONFIG_ARDUINO_USB_CDC_ON_BOOT=1

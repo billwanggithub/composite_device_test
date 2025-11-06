@@ -84,6 +84,10 @@ class MyServerCallbacks: public BLEServerCallbacks {
     void onDisconnect(BLEServer* pServer) {
         bleDeviceConnected = false;
         USBSerial.println("[BLE] 客戶端已斷開");
+        // 重新開始廣播，允許其他客戶端連接
+        delay(500);  // 短暫延遲確保斷開完成
+        pServer->startAdvertising();
+        USBSerial.println("[BLE] 重新開始廣播");
     }
 };
 

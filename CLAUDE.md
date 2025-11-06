@@ -321,11 +321,11 @@ The device supports **two HID command protocols** for maximum flexibility:
 - Long responses are automatically split into multiple 64-byte packets by `HIDResponse` class
 
 **Host-Side Implementation:**
-- Test script (`test_hid.py`) supports both protocols:
-  - `python test_hid.py test` - Plain text protocol
-  - `python test_hid.py test-0xa1` - 0xA1 protocol
-  - `python test_hid.py interactive` - Interactive mode (plain text)
-  - `python test_hid.py interactive-0xa1` - Interactive mode (0xA1 protocol)
+- Test script (`scripts/test_hid.py`) supports both protocols:
+  - `python scripts/test_hid.py test` - Plain text protocol
+  - `python scripts/test_hid.py test-0xa1` - 0xA1 protocol
+  - `python scripts/test_hid.py interactive` - Interactive mode (plain text)
+  - `python scripts/test_hid.py interactive-0xa1` - Interactive mode (0xA1 protocol)
 
 ### Unified Command System
 
@@ -597,20 +597,20 @@ To add a new task:
 
 ### USB Testing Tools
 
-Example Python test scripts are available demonstrating various testing scenarios:
+Example Python test scripts are available in the `scripts/` folder demonstrating various testing scenarios:
 
-**test_hid.py** - HID interface testing:
+**scripts/test_hid.py** - HID interface testing:
 - Device enumeration and opening
 - Sending 64-byte HID OUT reports without Report ID
 - Structured test patterns for verification
 - Interactive mode with protocol switching
 
-**test_cdc.py** - CDC interface testing:
+**scripts/test_cdc.py** - CDC interface testing:
 - Serial port scanning and filtering
 - Command testing via USB Serial
 - Interactive console mode
 
-**test_all.py** - Integrated testing:
+**scripts/test_all.py** - Integrated testing:
 - Tests both CDC and HID interfaces
 - Verifies multi-channel response functionality
 - Compares responses across interfaces
@@ -723,7 +723,7 @@ The project documentation is organized as follows:
   - Protocol version history
 
 - **[TESTING.md](TESTING.md)** - Complete testing guide
-  - Test script usage (test_hid.py, test_cdc.py, test_all.py)
+  - Test script usage (scripts/test_hid.py, scripts/test_cdc.py, scripts/test_all.py, scripts/ble_client.py)
   - COM port filtering strategy
   - Testing scenarios and verification procedures
   - Advanced testing techniques

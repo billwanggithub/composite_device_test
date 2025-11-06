@@ -275,7 +275,7 @@ void BLEResponse::print(const char* str) {
     if (bleDeviceConnected) {
         pCharacteristic->setValue((uint8_t*)str, len);
         pCharacteristic->notify();
-        delay(10);  // 確保 BLE 封包傳送
+        delay(50);  // 增加延遲確保 BLE stack 處理完成
         return;
     }
 
@@ -306,7 +306,7 @@ void BLEResponse::println(const char* str) {
         BLECharacteristic* pCharacteristic = static_cast<BLECharacteristic*>(_characteristic);
         pCharacteristic->setValue((uint8_t*)buf, len+1);
         pCharacteristic->notify();
-        delay(10);
+        delay(50);  // 增加延遲確保 BLE stack 處理完成
         free(buf);
         return;
     }
