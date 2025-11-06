@@ -330,9 +330,13 @@ void motorTask(void* parameter) {
     TickType_t lastRPMUpdate = 0;
     TickType_t lastSafetyCheck = 0;
     TickType_t lastLEDUpdate = 0;
+    TickType_t lastWatchdogFeed = 0;
 
     while (true) {
         TickType_t now = xTaskGetTickCount();
+
+        // Update PWM ramping (high frequency for smooth transitions)
+        motorControl.updateRamping();
 
         // Update RPM reading
         if (now - lastRPMUpdate >= pdMS_TO_TICKS(motorSettingsManager.get().rpmUpdateRate)) {
@@ -340,12 +344,26 @@ void motorTask(void* parameter) {
             lastRPMUpdate = now;
         }
 
+        // Feed watchdog every 100ms
+        if (now - lastWatchdogFeed >= pdMS_TO_TICKS(100)) {
+            motorControl.feedWatchdog();
+            lastWatchdogFeed = now;
+        }
+
         // Safety check every 500ms
         if (now - lastSafetyCheck >= pdMS_TO_TICKS(500)) {
-            if (!motorControl.checkSafety()) {
+            bool safetyOK = motorControl.checkSafety();
+            bool watchdogOK = motorControl.checkWatchdog();
+
+            if (!safetyOK || !watchdogOK) {
                 // Emergency stop triggered
                 if (xSemaphoreTake(serialMutex, pdMS_TO_TICKS(10))) {
-                    USBSerial.println("\n⚠️ SAFETY ALERT: Emergency stop activated!");
+                    if (!safetyOK) {
+                        USBSerial.println("\n⚠️ SAFETY ALERT: Emergency stop activated!");
+                    }
+                    if (!watchdogOK) {
+                        USBSerial.println("\n⚠️ WATCHDOG ALERT: Timeout detected - emergency stop!");
+                    }
                     xSemaphoreGive(serialMutex);
                 }
                 motorControl.emergencyStop();
@@ -361,6 +379,9 @@ void motorTask(void* parameter) {
             if (bleDeviceConnected) {
                 // BLE connected - purple
                 statusLED.setPurple();
+            } else if (motorControl.isRamping()) {
+                // Ramping active - yellow (smooth transition)
+                statusLED.setYellow();
             } else if (motorControl.getPWMDuty() > 0.1) {
                 // Motor running - blue
                 statusLED.setBlue();
@@ -371,7 +392,7 @@ void motorTask(void* parameter) {
             lastLEDUpdate = now;
         }
 
-        // Yield to other tasks
+        // Yield to other tasks (10ms loop rate for smooth ramping)
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
