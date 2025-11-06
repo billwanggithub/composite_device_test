@@ -7,8 +7,7 @@
 enum CommandSource {
     CMD_SOURCE_CDC,        // CDC 序列埠
     CMD_SOURCE_HID,        // HID 介面
-    CMD_SOURCE_BLE,        // BLE GATT 介面
-    CMD_SOURCE_BT_SERIAL   // Bluetooth Serial (SPP)
+    CMD_SOURCE_BLE         // BLE GATT 介面
 };
 
 // 命令回應介面
@@ -141,16 +140,8 @@ private:
 };
 
 // Bluetooth Serial 回應實作
-class BTSerialResponse : public ICommandResponse {
-public:
-    BTSerialResponse(void* bt_serial) : _btSerial(bt_serial) {}
-
-    void print(const char* str) override;
-    void println(const char* str) override;
-    void printf(const char* format, ...) override;
-
-private:
-    void* _btSerial;  // BluetoothSerial* (避免在 header 中引入 BT 相依性)
-};
+// Note: Classic Bluetooth SPP (BluetoothSerial) is not supported on ESP32-S3.
+// BLE GATT is used for serial/console transport instead. No BTSerialResponse
+// is provided here to avoid depending on Classic BT symbols.
 
 #endif // COMMAND_PARSER_H

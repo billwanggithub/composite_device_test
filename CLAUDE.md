@@ -123,6 +123,18 @@ build_flags =
 
 **Important:** The TinyUSB HID buffer size flags are set to 128 to provide sufficient buffer space, though the actual data payload is 64 bytes.
 
+### Bluetooth Mode Requirements
+The `platformio.ini` includes these build flags for Bluetooth functionality:
+```ini
+build_flags =
+    -DCONFIG_BT_ENABLED=1
+    -DCONFIG_BLUEDROID_ENABLED=1
+    -DCONFIG_BT_BLE_ENABLED=1
+    -DCONFIG_BT_CLASSIC_ENABLED=1
+```
+
+These flags enable both BLE and Classic Bluetooth support on ESP32-S3. The Bluetooth stack runs independently from USB and can operate simultaneously.
+
 ### DTR Signal Dependency
 The CDC serial interface (`USBSerial`) requires DTR (Data Terminal Ready) to be enabled in the serial terminal. Without DTR:
 - The device will wait 5 seconds at boot (see timeout loop in `setup()` function)
@@ -629,15 +641,58 @@ To add a new task:
 
 ## Host-Side Tools
 
-Example Python test scripts are available in the `test_hid_no_reportid.py` file, demonstrating:
+### USB Testing Tools
+
+Example Python test scripts are available demonstrating various testing scenarios:
+
+**test_hid.py** - HID interface testing:
 - Device enumeration and opening
 - Sending 64-byte HID OUT reports without Report ID
 - Structured test patterns for verification
+- Interactive mode with protocol switching
+
+**test_cdc.py** - CDC interface testing:
+- Serial port scanning and filtering
+- Command testing via USB Serial
+- Interactive console mode
+
+**test_all.py** - Integrated testing:
+- Tests both CDC and HID interfaces
+- Verifies multi-channel response functionality
+- Compares responses across interfaces
 
 For Windows development:
 - Use `pywinusb` library for HID communication
 - Use Bus Hound for USB protocol analysis
 - Device shows as "TinyUSB HID" in Device Manager
+
+### BLE Testing Tools
+
+**scripts/ble_client.py** - BLE GATT console client:
+- Requires `bleak` library: `pip install bleak`
+- Scans for ESP32-S3 BLE device by name or address
+- Subscribes to TX characteristic for notifications
+- Writes commands to RX characteristic
+- Interactive command-line interface
+
+**Usage:**
+```bash
+# Connect by device name
+python scripts/ble_client.py --name ESP32_S3_Console
+
+# Connect by address (if known)
+python scripts/ble_client.py --address XX:XX:XX:XX:XX:XX
+
+# Scan only
+python scripts/ble_client.py --scan
+```
+
+**Mobile Testing:**
+- Use nRF Connect app (Android/iOS) for manual testing
+- See README.md for detailed nRF Connect usage instructions
+- Service UUID: `4fafc201-1fb5-459e-8fcc-c5c9c331914b`
+- RX UUID: `beb5483e-36e1-4688-b7f5-ea07361b26a8` (Write)
+- TX UUID: `beb5483e-36e1-4688-b7f5-ea07361b26a9` (Notify)
 
 ## Troubleshooting
 

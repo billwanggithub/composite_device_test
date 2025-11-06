@@ -12,7 +12,6 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
-#include "BluetoothSerial.h"
 
 // USB CDC 實例（用於 console）
 USBCDC USBSerial;
@@ -30,9 +29,11 @@ BLECharacteristic* pTxCharacteristic = nullptr;
 BLECharacteristic* pRxCharacteristic = nullptr;
 bool bleDeviceConnected = false;
 bool bleOldDeviceConnected = false;
+// Queue for pending BLE notifications; stores heap-allocated char* messages
+QueueHandle_t bleNotifyQueue = nullptr;
 
-// Bluetooth Serial 實例
-BluetoothSerial SerialBT;
+// Classic Bluetooth Serial (SPP) is not available on ESP32-S3; BLE GATT is used
+// for console/serial functionality instead.
 
 // HID 資料結構
 typedef struct {
@@ -58,7 +59,7 @@ CDCResponse* cdc_response = nullptr;
 HIDResponse* hid_response = nullptr;
 MultiChannelResponse* multi_response = nullptr;  // 多通道回應（同時輸出到 HID 和 CDC）
 BLEResponse* ble_response = nullptr;
-BTSerialResponse* bt_serial_response = nullptr;
+// BTSerialResponse is removed as Bluetooth Serial is not used anymore
 
 // HID 命令緩衝區
 String hid_command_buffer = "";
@@ -68,6 +69,20 @@ class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
         bleDeviceConnected = true;
         USBSerial.println("[BLE] 客戶端已連接");
+        // Flush any queued notifications
+        if (bleNotifyQueue) {
+            char* msg = nullptr;
+            while (xQueueReceive(bleNotifyQueue, &msg, 0) == pdTRUE) {
+                if (msg) {
+                    if (pTxCharacteristic) {
+                        pTxCharacteristic->setValue((uint8_t*)msg, strlen(msg));
+                        pTxCharacteristic->notify();
+                        delay(10);
+                    }
+                    free(msg);
+                }
+            }
+        }
     }
 
     void onDisconnect(BLEServer* pServer) {
@@ -188,6 +203,8 @@ void hidTask(void* parameter) {
     }
 }
 
+// No BT Serial task on ESP32-S3
+
 // CDC 處理 Task
 void cdcTask(void* parameter) {
     String cdc_command_buffer = "";
@@ -213,38 +230,7 @@ void cdcTask(void* parameter) {
     }
 }
 
-// Bluetooth Serial 處理 Task
-void btSerialTask(void* parameter) {
-    String bt_command_buffer = "";
-
-    while (true) {
-        // 處理 Bluetooth Serial 輸入
-        while (SerialBT.available()) {
-            char c = SerialBT.read();
-
-            // 處理字元並執行命令（BT Serial 命令同時輸出到 BT Serial 和 CDC）
-            MultiChannelResponse btMultiResponse(bt_serial_response, cdc_response);
-
-            // 儲存當前命令用於除錯顯示
-            String current_cmd = bt_command_buffer;
-
-            if (parser.feedChar(c, bt_command_buffer, &btMultiResponse, CMD_SOURCE_BT_SERIAL)) {
-                // 命令已處理，顯示提示符
-                SerialBT.print("\n> ");
-
-                // 同時在 CDC 上顯示除錯資訊
-                if (xSemaphoreTake(serialMutex, pdMS_TO_TICKS(100))) {
-                    USBSerial.printf("\n[BT Serial CMD] %s\n", current_cmd.c_str());
-                    USBSerial.print("> ");
-                    xSemaphoreGive(serialMutex);
-                }
-            }
-        }
-
-        // 短暫延遲避免佔用 CPU
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
-}
+// Bluetooth Serial (SPP) removed — no BT Serial task
 
 void setup() {
     // 初始化 USB CDC
@@ -292,18 +278,16 @@ void setup() {
     pAdvertising->setMinPreferred(0x0);
     BLEDevice::startAdvertising();
 
+    // Create queue for pending BLE notifications (store char* pointers)
+    // Capacity: 32 messages
+    bleNotifyQueue = xQueueCreate(32, sizeof(char*));
+    if (!bleNotifyQueue) {
+        USBSerial.println("[WARN] 無法建立 bleNotifyQueue；暫時訊息將被丟棄");
+    }
+
     // 創建 BLE 回應物件
     ble_response = new BLEResponse(pTxCharacteristic);
 
-    // 初始化 Bluetooth Serial
-    if (!SerialBT.begin("ESP32_S3_BT_Console")) {
-        USBSerial.println("[ERROR] Bluetooth Serial 初始化失敗！");
-    } else {
-        USBSerial.println("[INFO] Bluetooth Serial 已啟動");
-    }
-
-    // 創建 Bluetooth Serial 回應物件
-    bt_serial_response = new BTSerialResponse(&SerialBT);
 
     // 等待 USB 連接（最多 5 秒）
     unsigned long start = millis();
@@ -319,7 +303,7 @@ void setup() {
     USBSerial.println("  - USB CDC: 序列埠 console");
     USBSerial.println("  - USB HID: 64 位元組（無 Report ID）");
     USBSerial.println("  - BLE GATT: 命令介面");
-    USBSerial.println("  - Bluetooth Serial: SPP console");
+        USBSerial.println("  - Bluetooth Serial: not available on ESP32-S3 (use BLE)");
     USBSerial.println("  - 架構: FreeRTOS 多工處理");
     USBSerial.println("\n統一命令介面：");
     USBSerial.println("  所有介面使用相同的命令集");
@@ -358,15 +342,7 @@ void setup() {
         1                  // Core 1
     );
 
-    xTaskCreatePinnedToCore(
-        btSerialTask,      // Task 函數
-        "BT_Serial_Task",  // Task 名稱
-        4096,              // Stack 大小
-        NULL,              // 參數
-        1,                 // 優先權（與 CDC 相同）
-        NULL,              // Task handle
-        1                  // Core 1
-    );
+    // No BT Serial task on ESP32-S3
 
     USBSerial.println("[INFO] FreeRTOS Tasks 已啟動");
     USBSerial.println("[INFO] - HID Task (優先權 2)");

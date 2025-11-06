@@ -398,6 +398,55 @@ xTaskCreatePinnedToCore(cdcTask, "CDC_Task", 4096, NULL, 1, NULL, 1);  // 優先
 
 **開發板**：ESP32-S3-DevKitC-1 N16R8
 **晶片**：ESP32-S3
+
+## 🔵 BLE GATT "Serial" (ESP32-S3)
+
+ESP32-S3 does not support Classic Bluetooth SPP. This project exposes a BLE GATT-based
+console instead: a writeable RX characteristic and a notify-only TX characteristic.
+
+- Service UUID: `4fafc201-1fb5-459e-8fcc-c5c9c331914b`
+- RX (write) UUID: `beb5483e-36e1-4688-b7f5-ea07361b26a8`
+- TX (notify) UUID: `beb5483e-36e1-4688-b7f5-ea07361b26a9`
+- Default BLE device name: `ESP32_S3_Console`
+
+A small Python test client that uses `bleak` is provided at `scripts/ble_client.py`.
+It will:
+
+- scan (or use a provided address) and connect to the device
+- subscribe to TX notifications and print incoming data
+- read stdin lines and write them to the RX characteristic (commands must end with `\n`)
+
+Quick example (install bleak first):
+
+```powershell
+pip install bleak
+python scripts/ble_client.py --name ESP32_S3_Console
+```
+
+See `scripts/ble_client.py` for details and options (you can also pass `--address`).
+
+### Mobile testing with nRF Connect (Android / iOS)
+
+You can manually test the BLE RX/TX console using the free nRF Connect mobile app.
+Follow these steps:
+
+1. Install nRF Connect from Google Play or the App Store.
+2. Open the app and start a scan. Look for the device named `ESP32_S3_Console` (or your device's configured name).
+3. Tap the device to connect.
+4. After connection expand the service with UUID `4fafc201-1fb5-459e-8fcc-c5c9c331914b`.
+5. Locate the TX characteristic (notify) with UUID `beb5483e-36e1-4688-b7f5-ea07361b26a9` and enable Notifications (tap the bell / subscribe icon).
+  - You should now see notifications coming from the device when it sends data (for example, command responses).
+6. Locate the RX characteristic (write) with UUID `beb5483e-36e1-4688-b7f5-ea07361b26a8`.
+  - Use the "Write" UI to send text; in the nRF Connect write box you can switch to "UTF-8" and enter text.
+  - IMPORTANT: Commands must end with a newline (press Enter or include `\n`), e.g. `HELP\n`.
+  - For this firmware you can write without response (Write Without Response) — both modes typically work, but the firmware's GATT write uses response=False in the test client.
+7. Observe responses in the TX notifications area. The device also prints to USB CDC if a host is connected.
+
+Tips:
+- On iOS the address is hidden; scan by device name. On Android you can prefer address if you have it.
+- If you don't see notifications, reconnect and ensure the TX characteristic is subscribed.
+- Use nRF Connect to send `*IDN?\n` or `HELP\n` to verify the command parser and responses.
+
 **Flash**：16 MB Quad SPI Flash
 **PSRAM**：8 MB Octal PSRAM
 **開發工具**：PlatformIO

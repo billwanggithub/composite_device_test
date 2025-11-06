@@ -1,0 +1,7 @@
+# Enable Bluetooth (Classic + BLE) and Bluedroid SPP
+# These Kconfig options are suggestions; adjust if your SDK version uses different names.
+CONFIG_BT_ENABLED=y
+CONFIG_BLUEDROID_ENABLED=y
+CONFIG_BT_SPP_ENABLED=y
+CONFIG_BTDM_CONTROLLER_MODE_BR_EDR_ONLY=y
+CONFIG_BTDM_CTRL_BR_EDR_SMP=y

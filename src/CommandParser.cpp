@@ -3,11 +3,12 @@
 #include "HIDProtocol.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/queue.h"
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
-#include "BluetoothSerial.h"
+#include <cstring>
 
 // 外部變數（從 main.cpp）
 extern CustomHID64 HID;
@@ -131,7 +132,7 @@ void CommandParser::handleHelp(ICommandResponse* response) {
     response->println("  - USB CDC (序列埠)");
     response->println("  - USB HID (64位元組自訂協定)");
     response->println("  - BLE GATT (低功耗藍牙)");
-    response->println("  - Bluetooth Serial (經典藍牙 SPP)");
+    // Classic Bluetooth Serial (SPP) is not available on ESP32-S3; use BLE GATT instead
     response->println("");
     response->println("所有命令必須以換行符結尾");
 }
@@ -165,7 +166,7 @@ void CommandParser::handleInfo(ICommandResponse* response) {
     response->println("  USB CDC: 已啟用");
     response->println("  USB HID: 64 位元組（無 Report ID）");
     response->println("  BLE GATT: 已啟用");
-    response->println("  BT Serial: 已啟用");
+    response->println("  BT Serial: 未啟用 (ESP32-S3 不支援 Classic SPP)");
 }
 
 void CommandParser::handleStatus(ICommandResponse* response) {
@@ -263,22 +264,63 @@ void HIDResponse::sendString(const char* str) {
 }
 
 // BLEResponse 實作
+// If no BLE client is connected, queue notifications so they will be flushed
+// when a client connects.
+extern bool bleDeviceConnected;
+extern QueueHandle_t bleNotifyQueue;
+
 void BLEResponse::print(const char* str) {
-    if (_characteristic) {
-        BLECharacteristic* pCharacteristic = static_cast<BLECharacteristic*>(_characteristic);
-        pCharacteristic->setValue((uint8_t*)str, strlen(str));
+    if (!_characteristic) return;
+    BLECharacteristic* pCharacteristic = static_cast<BLECharacteristic*>(_characteristic);
+    size_t len = strlen(str);
+
+    if (bleDeviceConnected) {
+        pCharacteristic->setValue((uint8_t*)str, len);
         pCharacteristic->notify();
         delay(10);  // 確保 BLE 封包傳送
+        return;
+    }
+
+    // Not connected: enqueue a copy of the string (heap-allocated)
+    if (bleNotifyQueue) {
+        char* copy = (char*)strdup(str);
+        if (copy) {
+            BaseType_t ok = xQueueSend(bleNotifyQueue, &copy, 0);
+            if (ok != pdTRUE) {
+                // queue full or failed; drop message
+                free(copy);
+            }
+        }
     }
 }
 
 void BLEResponse::println(const char* str) {
-    if (_characteristic) {
+    // build a newline-terminated copy and reuse print/path
+    size_t len = strlen(str);
+    char* buf = (char*)malloc(len + 2);
+    if (!buf) return;
+    memcpy(buf, str, len);
+    buf[len] = '\n';
+    buf[len+1] = '\0';
+
+    // If connected, send immediately; otherwise enqueue
+    if (bleDeviceConnected && _characteristic) {
         BLECharacteristic* pCharacteristic = static_cast<BLECharacteristic*>(_characteristic);
-        String data = String(str) + "\n";
-        pCharacteristic->setValue((uint8_t*)data.c_str(), data.length());
+        pCharacteristic->setValue((uint8_t*)buf, len+1);
         pCharacteristic->notify();
         delay(10);
+        free(buf);
+        return;
+    }
+
+    if (bleNotifyQueue) {
+        char* copy = (char*)buf; // take ownership
+        BaseType_t ok = xQueueSend(bleNotifyQueue, &copy, 0);
+        if (ok != pdTRUE) {
+            free(copy);
+        }
+    } else {
+        free(buf);
     }
 }
 
@@ -292,28 +334,4 @@ void BLEResponse::printf(const char* format, ...) {
 }
 
 // BTSerialResponse 實作
-void BTSerialResponse::print(const char* str) {
-    if (_btSerial) {
-        BluetoothSerial* pBTSerial = static_cast<BluetoothSerial*>(_btSerial);
-        pBTSerial->print(str);
-    }
-}
-
-void BTSerialResponse::println(const char* str) {
-    if (_btSerial) {
-        BluetoothSerial* pBTSerial = static_cast<BluetoothSerial*>(_btSerial);
-        pBTSerial->println(str);
-    }
-}
-
-void BTSerialResponse::printf(const char* format, ...) {
-    if (_btSerial) {
-        char buffer[256];
-        va_list args;
-        va_start(args, format);
-        vsnprintf(buffer, sizeof(buffer), format, args);
-        va_end(args);
-        BluetoothSerial* pBTSerial = static_cast<BluetoothSerial*>(_btSerial);
-        pBTSerial->print(buffer);
-    }
-}
+// Classic BT SPP support is intentionally omitted for ESP32-S3 builds.
