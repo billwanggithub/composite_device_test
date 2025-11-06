@@ -56,6 +56,12 @@ private:
     void handleSaveSettings(ICommandResponse* response);
     void handleLoadSettings(ICommandResponse* response);
     void handleResetSettings(ICommandResponse* response);
+
+    // Advanced features (Priority 3)
+    void handleSetPWMFreqRamped(ICommandResponse* response, uint32_t freq, uint32_t rampTimeMs);
+    void handleSetPWMDutyRamped(ICommandResponse* response, float duty, uint32_t rampTimeMs);
+    void handleSetRPMFilterSize(ICommandResponse* response, uint8_t size);
+    void handleFilterStatus(ICommandResponse* response);
 };
 
 // CDC 回應實作

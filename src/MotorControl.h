@@ -90,14 +90,29 @@ public:
      *
      * Should be called periodically (e.g., every 100ms) from motor task.
      * Reads tachometer capture data and calculates RPM.
+     * Applies moving average filtering if enabled.
      */
     void updateRPM();
 
     /**
-     * @brief Get current RPM reading
-     * @return RPM value
+     * @brief Update PWM ramping (if active)
+     *
+     * Should be called periodically (e.g., every 10-20ms) from motor task.
+     * Gradually transitions PWM frequency and duty to target values.
+     */
+    void updateRamping();
+
+    /**
+     * @brief Get current RPM reading (filtered)
+     * @return Filtered RPM value
      */
     float getCurrentRPM() const;
+
+    /**
+     * @brief Get raw RPM reading (unfiltered)
+     * @return Raw RPM value from last capture
+     */
+    float getRawRPM() const;
 
     /**
      * @brief Get current tachometer input frequency
@@ -136,6 +151,48 @@ public:
     void emergencyStop();
 
     /**
+     * @brief Set PWM frequency with ramping
+     * @param frequency Target frequency in Hz
+     * @param rampTimeMs Ramp duration in milliseconds (0 = immediate)
+     * @return true if ramp started successfully
+     */
+    bool setPWMFrequencyRamped(uint32_t frequency, uint32_t rampTimeMs);
+
+    /**
+     * @brief Set PWM duty with ramping
+     * @param duty Target duty cycle in percent (0.0 - 100.0)
+     * @param rampTimeMs Ramp duration in milliseconds (0 = immediate)
+     * @return true if ramp started successfully
+     */
+    bool setPWMDutyRamped(float duty, uint32_t rampTimeMs);
+
+    /**
+     * @brief Check if ramping is active
+     * @return true if frequency or duty ramping is in progress
+     */
+    bool isRamping() const;
+
+    /**
+     * @brief Configure RPM filter
+     * @param windowSize Number of samples for moving average (1-20)
+     */
+    void setRPMFilterSize(uint8_t windowSize);
+
+    /**
+     * @brief Get current RPM filter window size
+     * @return Filter window size
+     */
+    uint8_t getRPMFilterSize() const;
+
+    /**
+     * @brief Feed the watchdog timer
+     *
+     * Must be called periodically from motor task to prevent watchdog reset.
+     * If not called within timeout period, system will reset.
+     */
+    void feedWatchdog();
+
+    /**
      * @brief Send pulse on GPIO 12 (change notification)
      *
      * Sends a brief pulse when PWM parameters change.
@@ -161,7 +218,8 @@ private:
     // Current state
     uint32_t currentFrequency = 0;
     float currentDuty = 0.0;
-    float currentRPM = 0.0;
+    float currentRPM = 0.0;          // Filtered RPM
+    float rawRPM = 0.0;              // Raw unfiltered RPM
     float currentInputFrequency = 0.0;
 
     // Capture data (shared with ISR)
@@ -173,6 +231,31 @@ private:
     bool emergencyStopActive = false;
     unsigned long lastRPMUpdateTime = 0;
     float lastRPM = 0.0;
+
+    // RPM Filtering
+    static const uint8_t MAX_FILTER_SIZE = 20;
+    float rpmFilterBuffer[MAX_FILTER_SIZE];
+    uint8_t rpmFilterSize = 5;          // Default 5-sample moving average
+    uint8_t rpmFilterIndex = 0;
+    uint8_t rpmFilterCount = 0;
+    bool rpmFilterEnabled = true;
+
+    // PWM Ramping
+    bool frequencyRampActive = false;
+    bool dutyRampActive = false;
+    uint32_t targetFrequency = 0;
+    float targetDuty = 0.0;
+    uint32_t frequencyRampStart = 0;
+    uint32_t frequencyRampDuration = 0;
+    uint32_t frequencyStartValue = 0;
+    unsigned long dutyRampStart = 0;
+    uint32_t dutyRampDuration = 0;
+    float dutyStartValue = 0.0;
+
+    // Watchdog Timer
+    bool watchdogEnabled = false;
+    unsigned long lastWatchdogFeed = 0;
+    static const uint32_t WATCHDOG_TIMEOUT_MS = 5000;  // 5 second timeout
 
     // Hardware configuration
     static const int PWM_OUTPUT_PIN = 10;
@@ -216,6 +299,19 @@ private:
                                           mcpwm_capture_channel_id_t cap_channel,
                                           const cap_event_data_t *edata,
                                           void *user_data);
+
+    /**
+     * @brief Apply RPM filter to raw value
+     * @param rawValue Raw RPM reading
+     * @return Filtered RPM value
+     */
+    float applyRPMFilter(float rawValue);
+
+    /**
+     * @brief Check watchdog timeout
+     * @return true if watchdog is OK, false if timeout occurred
+     */
+    bool checkWatchdog();
 };
 
 #endif // MOTOR_CONTROL_H

@@ -7,6 +7,10 @@ volatile uint32_t MotorControl::lastCaptureTime = 0;
 
 MotorControl::MotorControl() {
     // Constructor - initialization happens in begin()
+    // Initialize RPM filter buffer
+    for (uint8_t i = 0; i < MAX_FILTER_SIZE; i++) {
+        rpmFilterBuffer[i] = 0.0f;
+    }
 }
 
 bool MotorControl::begin(MotorSettings* settings) {
@@ -270,13 +274,17 @@ void MotorControl::updateRPM() {
             // Frequency = Clock / Period
             currentInputFrequency = (float)MCPWM_CAP_TIMER_CLK / (float)period;
 
-            // Calculate RPM from input frequency
+            // Calculate raw RPM from input frequency
             // RPM = (Frequency × 60) / Pole Pairs
-            currentRPM = (currentInputFrequency * 60.0f) / (float)pSettings->polePairs;
+            rawRPM = (currentInputFrequency * 60.0f) / (float)pSettings->polePairs;
+
+            // Apply filtering
+            currentRPM = applyRPMFilter(rawRPM);
 
             lastRPMUpdateTime = millis();
         } else {
             currentInputFrequency = 0.0f;
+            rawRPM = 0.0f;
             currentRPM = 0.0f;
         }
     } else {
@@ -284,6 +292,7 @@ void MotorControl::updateRPM() {
         unsigned long now = millis();
         if (now - lastCaptureTime > 1000 && lastCaptureTime > 0) {
             // No signal for 1 second - assume stopped
+            rawRPM = 0.0f;
             currentRPM = 0.0f;
             currentInputFrequency = 0.0f;
         }
@@ -294,6 +303,10 @@ void MotorControl::updateRPM() {
 
 float MotorControl::getCurrentRPM() const {
     return currentRPM;
+}
+
+float MotorControl::getRawRPM() const {
+    return rawRPM;
 }
 
 float MotorControl::getInputFrequency() const {
@@ -358,4 +371,213 @@ void MotorControl::sendPulse() {
 
 unsigned long MotorControl::getUptime() const {
     return millis() - initTime;
+}
+
+// ============================================================================
+// RPM Filtering Implementation
+// ============================================================================
+
+float MotorControl::applyRPMFilter(float rawValue) {
+    if (!rpmFilterEnabled || rpmFilterSize == 1) {
+        // Filter disabled or size = 1, return raw value
+        return rawValue;
+    }
+
+    // Add new sample to circular buffer
+    rpmFilterBuffer[rpmFilterIndex] = rawValue;
+    rpmFilterIndex = (rpmFilterIndex + 1) % rpmFilterSize;
+
+    // Track how many samples we have
+    if (rpmFilterCount < rpmFilterSize) {
+        rpmFilterCount++;
+    }
+
+    // Calculate moving average
+    float sum = 0.0f;
+    for (uint8_t i = 0; i < rpmFilterCount; i++) {
+        sum += rpmFilterBuffer[i];
+    }
+
+    return sum / (float)rpmFilterCount;
+}
+
+void MotorControl::setRPMFilterSize(uint8_t windowSize) {
+    // Clamp to valid range
+    if (windowSize < 1) windowSize = 1;
+    if (windowSize > MAX_FILTER_SIZE) windowSize = MAX_FILTER_SIZE;
+
+    rpmFilterSize = windowSize;
+    rpmFilterIndex = 0;
+    rpmFilterCount = 0;
+
+    // Clear buffer
+    for (uint8_t i = 0; i < MAX_FILTER_SIZE; i++) {
+        rpmFilterBuffer[i] = 0.0f;
+    }
+
+    Serial.printf("✅ RPM filter size set to: %d samples\n", windowSize);
+}
+
+uint8_t MotorControl::getRPMFilterSize() const {
+    return rpmFilterSize;
+}
+
+// ============================================================================
+// PWM Ramping Implementation
+// ============================================================================
+
+bool MotorControl::setPWMFrequencyRamped(uint32_t frequency, uint32_t rampTimeMs) {
+    // Validate range
+    if (frequency < MotorLimits::MIN_FREQUENCY) {
+        frequency = MotorLimits::MIN_FREQUENCY;
+    }
+    if (frequency > MotorLimits::MAX_FREQUENCY) {
+        frequency = MotorLimits::MAX_FREQUENCY;
+    }
+
+    if (!mcpwmInitialized) {
+        Serial.println("❌ MCPWM not initialized!");
+        return false;
+    }
+
+    // If ramp time is 0, set immediately
+    if (rampTimeMs == 0) {
+        return setPWMFrequency(frequency);
+    }
+
+    // Start ramping
+    targetFrequency = frequency;
+    frequencyStartValue = currentFrequency;
+    frequencyRampStart = millis();
+    frequencyRampDuration = rampTimeMs;
+    frequencyRampActive = true;
+
+    Serial.printf("🔄 Starting frequency ramp: %d Hz → %d Hz over %d ms\n",
+                 currentFrequency, frequency, rampTimeMs);
+
+    return true;
+}
+
+bool MotorControl::setPWMDutyRamped(float duty, uint32_t rampTimeMs) {
+    // Validate range
+    if (duty < MotorLimits::MIN_DUTY) {
+        duty = MotorLimits::MIN_DUTY;
+    }
+    if (duty > MotorLimits::MAX_DUTY) {
+        duty = MotorLimits::MAX_DUTY;
+    }
+
+    if (!mcpwmInitialized) {
+        Serial.println("❌ MCPWM not initialized!");
+        return false;
+    }
+
+    // If ramp time is 0, set immediately
+    if (rampTimeMs == 0) {
+        return setPWMDuty(duty);
+    }
+
+    // Start ramping
+    targetDuty = duty;
+    dutyStartValue = currentDuty;
+    dutyRampStart = millis();
+    dutyRampDuration = rampTimeMs;
+    dutyRampActive = true;
+
+    Serial.printf("🔄 Starting duty ramp: %.1f%% → %.1f%% over %d ms\n",
+                 currentDuty, duty, rampTimeMs);
+
+    return true;
+}
+
+void MotorControl::updateRamping() {
+    if (!mcpwmInitialized) {
+        return;
+    }
+
+    unsigned long now = millis();
+    bool rampCompleted = false;
+
+    // Update frequency ramping
+    if (frequencyRampActive) {
+        unsigned long elapsed = now - frequencyRampStart;
+
+        if (elapsed >= frequencyRampDuration) {
+            // Ramp complete - set final value
+            setPWMFrequency(targetFrequency);
+            frequencyRampActive = false;
+            rampCompleted = true;
+        } else {
+            // Calculate intermediate value using linear interpolation
+            float progress = (float)elapsed / (float)frequencyRampDuration;
+            uint32_t newFrequency = frequencyStartValue +
+                                   (uint32_t)((float)(targetFrequency - frequencyStartValue) * progress);
+
+            // Apply without change detection (force update)
+            mcpwm_set_frequency(PWM_MCPWM_UNIT, PWM_MCPWM_TIMER, newFrequency);
+            currentFrequency = newFrequency;
+        }
+    }
+
+    // Update duty ramping
+    if (dutyRampActive) {
+        unsigned long elapsed = now - dutyRampStart;
+
+        if (elapsed >= dutyRampDuration) {
+            // Ramp complete - set final value
+            setPWMDuty(targetDuty);
+            dutyRampActive = false;
+            rampCompleted = true;
+        } else {
+            // Calculate intermediate value using linear interpolation
+            float progress = (float)elapsed / (float)dutyRampDuration;
+            float newDuty = dutyStartValue + (targetDuty - dutyStartValue) * progress;
+
+            // Apply without change detection (force update)
+            mcpwm_set_duty(PWM_MCPWM_UNIT, PWM_MCPWM_TIMER, MCPWM_OPR_A, newDuty);
+            mcpwm_set_duty_type(PWM_MCPWM_UNIT, PWM_MCPWM_TIMER,
+                               MCPWM_OPR_A, MCPWM_DUTY_MODE_0);
+            currentDuty = newDuty;
+        }
+    }
+
+    // Send pulse when ramp completes
+    if (rampCompleted) {
+        sendPulse();
+    }
+}
+
+bool MotorControl::isRamping() const {
+    return frequencyRampActive || dutyRampActive;
+}
+
+// ============================================================================
+// Watchdog Timer Implementation
+// ============================================================================
+
+void MotorControl::feedWatchdog() {
+    lastWatchdogFeed = millis();
+
+    // Enable watchdog on first feed
+    if (!watchdogEnabled) {
+        watchdogEnabled = true;
+        Serial.printf("✅ Watchdog timer enabled (timeout: %d ms)\n", WATCHDOG_TIMEOUT_MS);
+    }
+}
+
+bool MotorControl::checkWatchdog() {
+    if (!watchdogEnabled) {
+        return true;  // Not enabled, always OK
+    }
+
+    unsigned long now = millis();
+    unsigned long elapsed = now - lastWatchdogFeed;
+
+    if (elapsed > WATCHDOG_TIMEOUT_MS) {
+        Serial.printf("⚠️ WATCHDOG TIMEOUT: %lu ms since last feed (max: %d ms)\n",
+                     elapsed, WATCHDOG_TIMEOUT_MS);
+        return false;
+    }
+
+    return true;
 }
