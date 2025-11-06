@@ -257,6 +257,7 @@ void CommandParser::handleHelp(ICommandResponse* response) {
     response->println("  SET PWM_FREQ <Hz>    - 設定 PWM 頻率 (10-500000 Hz)");
     response->println("  SET PWM_DUTY <%>     - 設定 PWM 占空比 (0-100%)");
     response->println("  SET POLE_PAIRS <num> - 設定馬達極對數 (1-12)");
+
     response->println("  SET MAX_FREQ <Hz>    - 設定最大頻率限制");
     response->println("  SET MAX_RPM <rpm>    - 設定最大 RPM 限制");
     response->println("  SET LED_BRIGHTNESS <val> - 設定 LED 亮度 (0-255)");
@@ -379,9 +380,18 @@ void CommandParser::handleClear(ICommandResponse* response) {
 // ==================== Motor Control Command Handlers ====================
 
 void CommandParser::handleSetPWMFreq(ICommandResponse* response, uint32_t freq) {
+    // Check against absolute hardware limits
     if (freq < MotorLimits::MIN_FREQUENCY || freq > MotorLimits::MAX_FREQUENCY) {
-        response->printf("❌ 錯誤：頻率必須在 %d - %d Hz 之間\n",
+        response->printf("❌ 錯誤：頻率必須在 %d - %d Hz 之間 (硬體限制)\n",
                         MotorLimits::MIN_FREQUENCY, MotorLimits::MAX_FREQUENCY);
+        return;
+    }
+    
+    // Check against user-configurable safety limit
+    if (freq > motorSettingsManager.get().maxFrequency) {
+        response->printf("❌ 錯誤：頻率 %d Hz 超過安全限制 %d Hz\n", 
+                        freq, motorSettingsManager.get().maxFrequency);
+        response->printf("   使用 'SET MAX_FREQ %d' 來提高限制\n", freq);
         return;
     }
 

@@ -13,7 +13,7 @@ struct MotorSettings {
     uint32_t frequency = 10000;        // PWM frequency in Hz (10-500000)
     float duty = 0.0;                  // PWM duty cycle in percent (0.0-100.0)
     uint8_t polePairs = 2;             // Motor pole pairs (1-12)
-    uint32_t maxFrequency = 100000;    // Maximum frequency limit in Hz
+    uint32_t maxFrequency = 500000;    // Maximum frequency limit (MCPWM driver limit: 500 kHz)
     uint32_t maxSafeRPM = 500000;      // Overspeed protection threshold
     uint8_t ledBrightness = 25;        // RGB LED brightness (0-255)
     uint32_t rpmUpdateRate = 100;      // RPM update interval in ms (20-1000)
@@ -96,7 +96,7 @@ namespace MotorDefaults {
     constexpr uint32_t FREQUENCY = 10000;
     constexpr float DUTY = 0.0;
     constexpr uint8_t POLE_PAIRS = 2;
-    constexpr uint32_t MAX_FREQUENCY = 100000;
+    constexpr uint32_t MAX_FREQUENCY = 500000;  // 500 kHz - MCPWM driver limit
     constexpr uint32_t MAX_SAFE_RPM = 500000;
     constexpr uint8_t LED_BRIGHTNESS = 25;
     constexpr uint32_t RPM_UPDATE_RATE = 100;
@@ -105,7 +105,7 @@ namespace MotorDefaults {
 // Validation limits
 namespace MotorLimits {
     constexpr uint32_t MIN_FREQUENCY = 10;
-    constexpr uint32_t MAX_FREQUENCY = 500000;
+    constexpr uint32_t MAX_FREQUENCY = 500000;  // 500 kHz - verified MCPWM limit
     constexpr float MIN_DUTY = 0.0;
     constexpr float MAX_DUTY = 100.0;
     constexpr uint8_t MIN_POLE_PAIRS = 1;

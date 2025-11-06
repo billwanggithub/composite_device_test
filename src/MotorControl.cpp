@@ -93,6 +93,9 @@ bool MotorControl::initPWM() {
         mcpwm_set_duty(PWM_MCPWM_UNIT, PWM_MCPWM_TIMER, MCPWM_OPR_A, pSettings->duty);
         mcpwm_set_duty_type(PWM_MCPWM_UNIT, PWM_MCPWM_TIMER, MCPWM_OPR_A, MCPWM_DUTY_MODE_0);
 
+        // Start the PWM timer
+        mcpwm_start(PWM_MCPWM_UNIT, PWM_MCPWM_TIMER);
+
         currentFrequency = pSettings->frequency;
         currentDuty = pSettings->duty;
 
@@ -156,6 +159,10 @@ bool IRAM_ATTR MotorControl::captureCallback(mcpwm_unit_t mcpwm,
 }
 
 bool MotorControl::setPWMFrequency(uint32_t frequency) {
+    // ALWAYS print to Serial (bypasses any response routing)
+    Serial.printf("\n>>> setPWMFrequency called: %d Hz <<<\n", frequency);
+    Serial.flush();
+    
     // Validate range
     if (frequency < MotorLimits::MIN_FREQUENCY) {
         Serial.printf("⚠️ Frequency %d Hz too low, clamping to %d Hz\n",
@@ -180,10 +187,30 @@ bool MotorControl::setPWMFrequency(uint32_t frequency) {
         return true;
     }
 
-    // Apply new frequency using MCPWM
+    Serial.printf("🔧 Setting PWM frequency from %d Hz to %d Hz...\n", currentFrequency, frequency);
+    
+    // Stop timer before reconfiguration
+    mcpwm_stop(PWM_MCPWM_UNIT, PWM_MCPWM_TIMER);
+    
+    Serial.printf("   Configuring MCPWM for %d Hz...\n", frequency);
+    
+    // Use standard API - works reliably up to 500 kHz
     esp_err_t result = mcpwm_set_frequency(PWM_MCPWM_UNIT, PWM_MCPWM_TIMER, frequency);
+    
+    Serial.printf("   mcpwm_set_frequency result: %s\n", esp_err_to_name(result));
+    
+    if (result == ESP_OK) {
+        // Reapply duty cycle
+        esp_err_t duty_result = mcpwm_set_duty(PWM_MCPWM_UNIT, PWM_MCPWM_TIMER, MCPWM_OPR_A, currentDuty);
+        Serial.printf("   mcpwm_set_duty result: %s (duty: %.1f%%)\n", esp_err_to_name(duty_result), currentDuty);
+        
+        mcpwm_set_duty_type(PWM_MCPWM_UNIT, PWM_MCPWM_TIMER, MCPWM_OPR_A, MCPWM_DUTY_MODE_0);
+    }
 
     if (result == ESP_OK) {
+        // Restart timer
+        mcpwm_start(PWM_MCPWM_UNIT, PWM_MCPWM_TIMER);
+        
         currentFrequency = frequency;
         pSettings->frequency = frequency;
 
@@ -195,7 +222,12 @@ bool MotorControl::setPWMFrequency(uint32_t frequency) {
         return true;
     }
 
-    Serial.printf("❌ Failed to set PWM frequency: %s\n", esp_err_to_name(result));
+    Serial.printf("❌ Failed to set PWM frequency to %d Hz: %s\n", frequency, esp_err_to_name(result));
+    Serial.printf("   MCPWM may not support this frequency (max ~40 MHz)\n");
+    
+    // Restart timer anyway to maintain previous state
+    mcpwm_start(PWM_MCPWM_UNIT, PWM_MCPWM_TIMER);
+    
     return false;
 }
 

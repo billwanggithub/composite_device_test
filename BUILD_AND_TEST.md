@@ -458,7 +458,7 @@ Free Heap should remain stable (~200-250 KB)
 ### Motor Control Commands
 
 ```
-SET PWM_FREQ <Hz>           Set PWM frequency (10-500000 Hz)
+SET PWM_FREQ <Hz>           Set PWM frequency (10-500000 Hz / 500 kHz max)
 SET PWM_DUTY <%>            Set PWM duty cycle (0-100%)
 SET POLE_PAIRS <num>        Set motor pole pairs (1-12)
 SET MAX_FREQ <Hz>           Set maximum frequency limit
