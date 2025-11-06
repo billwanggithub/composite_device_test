@@ -3,6 +3,11 @@
 #include "HIDProtocol.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
+#include "BluetoothSerial.h"
 
 // 外部變數（從 main.cpp）
 extern CustomHID64 HID;
@@ -122,6 +127,12 @@ void CommandParser::handleHelp(ICommandResponse* response) {
     response->println("  READ    - 讀取 HID OUT 緩衝區");
     response->println("  CLEAR   - 清除 HID OUT 緩衝區");
     response->println("");
+    response->println("支援的介面:");
+    response->println("  - USB CDC (序列埠)");
+    response->println("  - USB HID (64位元組自訂協定)");
+    response->println("  - BLE GATT (低功耗藍牙)");
+    response->println("  - Bluetooth Serial (經典藍牙 SPP)");
+    response->println("");
     response->println("所有命令必須以換行符結尾");
 }
 
@@ -150,9 +161,11 @@ void CommandParser::handleInfo(ICommandResponse* response) {
                      ESP.getFreeHeap(),
                      ESP.getFreeHeap() / 1024.0);
     response->println("");
-    response->println("USB 介面:");
-    response->println("  CDC: 已啟用");
-    response->println("  HID: 64 位元組（無 Report ID）");
+    response->println("通訊介面:");
+    response->println("  USB CDC: 已啟用");
+    response->println("  USB HID: 64 位元組（無 Report ID）");
+    response->println("  BLE GATT: 已啟用");
+    response->println("  BT Serial: 已啟用");
 }
 
 void CommandParser::handleStatus(ICommandResponse* response) {
@@ -246,5 +259,61 @@ void HIDResponse::sendString(const char* str) {
 
         // 短暫延遲確保主機接收
         delay(10);
+    }
+}
+
+// BLEResponse 實作
+void BLEResponse::print(const char* str) {
+    if (_characteristic) {
+        BLECharacteristic* pCharacteristic = static_cast<BLECharacteristic*>(_characteristic);
+        pCharacteristic->setValue((uint8_t*)str, strlen(str));
+        pCharacteristic->notify();
+        delay(10);  // 確保 BLE 封包傳送
+    }
+}
+
+void BLEResponse::println(const char* str) {
+    if (_characteristic) {
+        BLECharacteristic* pCharacteristic = static_cast<BLECharacteristic*>(_characteristic);
+        String data = String(str) + "\n";
+        pCharacteristic->setValue((uint8_t*)data.c_str(), data.length());
+        pCharacteristic->notify();
+        delay(10);
+    }
+}
+
+void BLEResponse::printf(const char* format, ...) {
+    char buffer[256];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buffer, sizeof(buffer), format, args);
+    va_end(args);
+    print(buffer);
+}
+
+// BTSerialResponse 實作
+void BTSerialResponse::print(const char* str) {
+    if (_btSerial) {
+        BluetoothSerial* pBTSerial = static_cast<BluetoothSerial*>(_btSerial);
+        pBTSerial->print(str);
+    }
+}
+
+void BTSerialResponse::println(const char* str) {
+    if (_btSerial) {
+        BluetoothSerial* pBTSerial = static_cast<BluetoothSerial*>(_btSerial);
+        pBTSerial->println(str);
+    }
+}
+
+void BTSerialResponse::printf(const char* format, ...) {
+    if (_btSerial) {
+        char buffer[256];
+        va_list args;
+        va_start(args, format);
+        vsnprintf(buffer, sizeof(buffer), format, args);
+        va_end(args);
+        BluetoothSerial* pBTSerial = static_cast<BluetoothSerial*>(_btSerial);
+        pBTSerial->print(buffer);
     }
 }
