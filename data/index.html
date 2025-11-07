@@ -1029,7 +1029,46 @@
         function t(key) {
             return translations[currentLanguage][key] || key;
         }
-        
+
+        // Load current configuration from ESP32 without changing motor state
+        async function loadConfiguration() {
+            try {
+                console.log('[DEBUG] Loading current configuration from /api/config');
+                const response = await fetch('/api/config?t=' + Date.now(), {
+                    cache: 'no-cache'
+                });
+                const data = await response.json();
+
+                console.log('[DEBUG] Config loaded:', data);
+
+                // Populate form fields with CURRENT motor values
+                // Set values directly to avoid triggering event listeners
+                if (data.frequency !== undefined) {
+                    elements.freqSlider.value = data.frequency;
+                    elements.freqInput.value = data.frequency;
+                    localStorage.setItem('currentFrequency', data.frequency.toString());
+                }
+
+                if (data.duty !== undefined) {
+                    elements.dutySlider.value = data.duty;
+                    elements.dutyInput.value = data.duty;
+                    localStorage.setItem('currentDuty', data.duty.toString());
+                }
+
+                if (data.polePairs !== undefined) {
+                    elements.polePairsSelect.value = data.polePairs;
+                }
+
+                if (data.maxFrequency !== undefined) {
+                    elements.maxFreqSelect.value = data.maxFrequency;
+                }
+
+                console.log('[DEBUG] Configuration loaded - Freq:', data.frequency, 'Hz, Duty:', data.duty, '%');
+            } catch (error) {
+                console.error('[ERROR] Failed to load configuration:', error);
+            }
+        }
+
         // Initialize the application
         async function init() {
             // CRITICAL: Load language FIRST from backend to ensure correct display
@@ -1064,8 +1103,8 @@
             setupEventListeners();
             updateMaxFrequencyLimit();
             startUpdateLoop();
-            loadSettings();
-            loadConfiguration();
+            // loadSettings();  // Don't auto-load from EEPROM on page load (changes motor state!)
+            loadConfiguration();  // Load current motor values to display in form
 
             // Initialize RPM refresh state to match checkbox
             const rpmRefreshCheckbox = document.getElementById('rpmRefreshCheckbox');
@@ -1156,31 +1195,10 @@
                     }
                 }
             });
-            
-            // Load initial duty value from localStorage
-            const savedDuty = localStorage.getItem('currentDuty');
-            if (savedDuty !== null) {
-                const duty = parseFloat(savedDuty);
-                if (!isNaN(duty)) {
-                    elements.dutySlider.value = duty;
-                    elements.dutyInput.value = duty;
-                }
-            }
-            
-            // Load initial frequency value from localStorage
-            const savedFreq = localStorage.getItem('currentFrequency');
-            if (savedFreq !== null) {
-                const frequency = parseInt(savedFreq);
-                if (!isNaN(frequency)) {
-                    elements.freqSlider.value = frequency;
-                    elements.freqInput.value = frequency;
-                }
-            } else {
-                // Set default frequency if none saved
-                localStorage.setItem('currentFrequency', '10000');
-                elements.freqSlider.value = '10000';
-                elements.freqInput.value = '10000';
-            }
+
+            // NOTE: Initial values are now loaded from /api/config via loadConfiguration()
+            // to show the CURRENT motor state, not from localStorage.
+            // localStorage is only used for cross-page synchronization when user makes changes.
         }
         
         // Setup all event listeners
