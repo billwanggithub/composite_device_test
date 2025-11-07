@@ -2,7 +2,7 @@
 
 ## Overview
 
-Successfully implemented sophisticated web interface clone from [billwanggithub/arduino](https://github.com/billwanggithub/arduino) repository into the composite_device_test project.
+Successfully implemented sophisticated web interface clone from [billwanggithub/Motor_Control_V0](https://github.com/billwanggithub/Motor_Control_V0) repository into the composite_device_test project.
 
 **Implementation Date:** 2025-11-07
 **Status:** ✅ Complete - Ready for Testing

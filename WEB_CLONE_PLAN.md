@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This document outlines the plan to clone the appearance and behavior of the webserver from the [billwanggithub/arduino](https://github.com/billwanggithub/arduino) repository into the current `composite_device_test` project.
+This document outlines the plan to clone the appearance and behavior of the webserver from the [billwanggithub/Motor_Control_V0](https://github.com/billwanggithub/Motor_Control_V0) repository into the current `composite_device_test` project.
 
 **Target Repository Analysis:** ESP32-S3 Motor Control System with sophisticated web interface featuring real-time monitoring, PWM control, and bilingual support.
 
@@ -763,4 +763,4 @@ This plan provides a comprehensive roadmap for cloning the sophisticated web int
 **Created:** 2025-11-07
 **Author:** Claude (Anthropic)
 **Target Project:** composite_device_test
-**Reference:** [billwanggithub/arduino](https://github.com/billwanggithub/arduino)
+**Reference:** [billwanggithub/Motor_Control_V0](https://github.com/billwanggithub/Motor_Control_V0)
