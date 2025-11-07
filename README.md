@@ -4,6 +4,7 @@
 
 ## ✨ 主要特性
 
+### 通訊介面
 - **多介面設計**：同時提供 USB CDC、USB HID 和 BLE GATT 介面
 - **統一命令系統**：所有介面共用相同的命令集
 - **雙協定支援**：
@@ -14,6 +15,17 @@
 - **執行緒安全**：完整的 Mutex 保護機制
 - **64-byte HID 報告**：無 Report ID，真正的 64 位元組傳輸
 - **BLE 無線控制**：透過 BLE GATT 特性發送命令
+
+### 馬達控制功能
+- **高精度 PWM 輸出**：使用 MCPWM 週邊，頻率範圍 10 Hz - 500 kHz
+- **即時 RPM 測量**：硬體 MCPWM Capture 轉速計輸入
+- **WiFi Web 介面**：支援 AP 模式和 Station 模式
+  - **AP 模式**：建立 WiFi 熱點 (192.168.4.1)，具備 Captive Portal
+  - **Station 模式**：連接現有 WiFi 網路
+- **Web 控制面板**：完整的 HTML/CSS/JS 控制介面
+- **REST API**：RESTful HTTP 端點用於遠端控制
+- **設定持久化**：儲存至 NVS（非揮發性儲存）
+- **狀態 LED 指示**：WS2812 RGB LED 顯示系統狀態
 
 ## 📚 語言說明 / Language Notes
 
@@ -158,6 +170,8 @@ python scripts/test_hid.py interactive-0xa1
 
 ## 📡 可用命令
 
+### 基本命令
+
 | 命令 | 說明 | 範例回應 |
 |------|------|---------|
 | `*IDN?` | SCPI 標準識別 | `HID_ESP32_S3` |
@@ -168,7 +182,91 @@ python scripts/test_hid.py interactive-0xa1
 | `READ` | 讀取 HID 緩衝區 | Hex dump (64 bytes) |
 | `CLEAR` | 清除 HID 緩衝區 | 確認訊息 |
 
+### 馬達控制命令
+
+| 命令 | 說明 | 範例 |
+|------|------|------|
+| `SET PWM_FREQ <Hz>` | 設定 PWM 頻率 (10-500000 Hz) | `SET PWM_FREQ 15000` |
+| `SET PWM_DUTY <%>` | 設定 PWM 佔空比 (0-100%) | `SET PWM_DUTY 75.5` |
+| `SET POLE_PAIRS <num>` | 設定馬達極對數 (1-12) | `SET POLE_PAIRS 2` |
+| `SET MAX_FREQ <Hz>` | 設定最大頻率限制 | `SET MAX_FREQ 100000` |
+| `SET LED_BRIGHTNESS <val>` | 設定 LED 亮度 (0-255) | `SET LED_BRIGHTNESS 50` |
+| `RPM` | 取得目前 RPM 讀數 | `RPM` |
+| `MOTOR STATUS` | 顯示詳細馬達狀態 | `MOTOR STATUS` |
+| `MOTOR STOP` | 緊急停止（設定佔空比為 0%） | `MOTOR STOP` |
+
+### WiFi 網路命令
+
+| 命令 | 說明 | 範例 |
+|------|------|------|
+| `WIFI <ssid> <password>` | 立即連接 WiFi | `WIFI MyNetwork MyPassword` |
+| `WIFI CONNECT` | 使用儲存的憑證連接 | `WIFI CONNECT` |
+| `START_WEB` | 手動啟動 Web 伺服器 | `START_WEB` |
+| `AP ON` | 啟用 AP 模式 | `AP ON` |
+| `AP OFF` | 停用 AP 模式 | `AP OFF` |
+| `AP STATUS` | 顯示 AP 狀態 | `AP STATUS` |
+| `IP` | 顯示 IP 位址和網路資訊 | `IP` |
+
+### 設定儲存命令
+
+| 命令 | 說明 | 範例 |
+|------|------|------|
+| `SAVE` | 儲存所有設定到 NVS | `SAVE` |
+| `LOAD` | 從 NVS 載入設定 | `LOAD` |
+| `RESET` | 重設為出廠預設值 | `RESET` |
+
 所有命令不區分大小寫，必須以換行符 (`\n` 或 `\r`) 結尾。
+
+### 快速開始範例
+
+```bash
+# 透過 CDC 序列埠控制馬達
+> SET PWM_FREQ 10000
+✅ PWM frequency set to: 10000 Hz
+
+> SET PWM_DUTY 50
+✅ PWM duty cycle set to: 50.0%
+
+> RPM
+RPM Reading:
+  Current RPM: 3000.0
+  Input Frequency: 100.0 Hz
+  Pole Pairs: 2
+
+# 連接 WiFi 並啟動 Web 伺服器
+> WIFI MyNetwork MyPassword
+✅ WiFi connected
+IP: 192.168.1.100
+
+> START_WEB
+✅ Web server started
+Access: http://192.168.1.100
+
+# 儲存設定
+> SAVE
+✅ Settings saved to NVS
+```
+
+### Web 介面存取
+
+啟用 WiFi 後，可透過以下方式存取 Web 控制面板：
+
+**AP 模式（預設啟用）：**
+- SSID：`ESP32_Motor_Control`
+- 密碼：`12345678`
+- IP 位址：`http://192.168.4.1`
+- Captive Portal：Android 裝置會自動開啟控制頁面
+
+**Station 模式：**
+- 使用 `IP` 命令查看取得的 IP 位址
+- 在瀏覽器開啟：`http://[IP位址]`
+
+**Web API 端點：**
+- `GET /api/status` - 取得系統狀態
+- `GET /api/rpm` - 取得 RPM 讀數
+- `POST /api/pwm` - 設定 PWM 參數
+- `POST /api/save` - 儲存設定
+- 更多端點請參閱 [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md)
 
 ## 🔧 架構概述
 
@@ -372,16 +470,55 @@ pio run -t upload
 - [ ] 命令以 `\n` 結尾
 - [ ] HID 命令使用正確的協定格式
 
+## 🔌 硬體接腳定義
+
+| 功能 | GPIO | 週邊 | 說明 |
+|------|------|------|------|
+| PWM 輸出 | 10 | MCPWM1_A | 馬達控制 PWM 訊號 |
+| 轉速計輸入 | 11 | MCPWM0_CAP0 | 硬體捕捉 Tachometer 訊號 |
+| 脈衝輸出 | 12 | Digital Out | PWM 變更通知 |
+| 狀態 LED | 48 | RMT Channel 0 | WS2812 RGB LED |
+| USB D- | 19 | USB OTG | 內建 USB |
+| USB D+ | 20 | USB OTG | 內建 USB |
+
+### 連接建議
+
+**PWM 輸出（GPIO 10）：**
+```
+ESP32 GPIO10 ─── 1kΩ ───┬─── 馬達驅動器 PWM 輸入
+                        └─── 100nF ─── GND
+```
+
+**轉速計輸入（GPIO 11）：**
+```
+ESP32 GPIO11 ──┬── 10kΩ ──── 3.3V (Pull-up)
+               └── 100nF ──── GND (濾波)
+Tachometer Signal ────────────┘
+```
+
+**RGB LED（GPIO 48）：**
+```
+ESP32 GPIO48 ─── 470Ω ─── WS2812 DIN
+3.3V ────────────────────── WS2812 VCC
+GND ─────────────────────── WS2812 GND
+```
+
 ## 🎯 專案結構
 
 ```
 composite_device_test/
 ├── src/
-│   ├── main.cpp              # 主程式（USB 初始化、Task 管理）
+│   ├── main.cpp              # 主程式（USB、WiFi、馬達初始化）
 │   ├── CustomHID.h/cpp       # 64-byte 自訂 HID 類別
 │   ├── CommandParser.h/cpp   # 統一命令解析器
 │   ├── HIDProtocol.h/cpp     # HID 協定處理
-│   └── ...
+│   ├── MotorControl.h/cpp    # PWM 和轉速計控制
+│   ├── MotorSettings.h/cpp   # 設定管理和 NVS 持久化
+│   ├── StatusLED.h/cpp       # WS2812 RGB LED 控制
+│   ├── wifi_defaults.h/cpp   # WiFi 預設配置
+│   └── ble_provisioning.h/cpp # BLE WiFi 配置
+├── data/
+│   └── index.html            # Web 控制面板（SPIFFS）
 ├── scripts/
 │   ├── test_hid.py           # HID 測試腳本
 │   ├── test_cdc.py           # CDC 測試腳本
@@ -389,10 +526,13 @@ composite_device_test/
 │   └── ble_client.py         # BLE GATT 測試客戶端
 ├── requirements.txt          # Python 依賴套件清單
 ├── platformio.ini            # PlatformIO 配置
-├── README.md                 # 本文件
-├── PROTOCOL.md               # 協定規格
-├── TESTING.md                # 測試指南
-└── CLAUDE.md                 # AI 開發說明
+├── README.md                 # 本文件（繁體中文）
+├── PROTOCOL.md               # HID 協定規格（繁體中文）
+├── TESTING.md                # 測試指南（繁體中文）
+├── CLAUDE.md                 # AI 開發說明（英文）
+├── IMPLEMENTATION_GUIDE.md   # 實作指南（英文）
+├── MOTOR_INTEGRATION_PLAN.md # 整合計畫（英文）
+└── STATUS_LED_GUIDE.md       # LED 指南（英文）
 ```
 
 ## 🛠️ 開發
