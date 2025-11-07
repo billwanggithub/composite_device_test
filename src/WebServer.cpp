@@ -199,8 +199,17 @@ void WebServerManager::handleWebSocketMessage(void *arg, uint8_t *data, size_t l
 }
 
 void WebServerManager::setupRoutes() {
-    // Serve main page from SPIFFS
+    // Serve main page from SPIFFS (root path)
     server->on("/", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        if (SPIFFS.exists("/index.html")) {
+            request->send(SPIFFS, "/index.html", "text/html");
+        } else {
+            request->send(200, "text/html", generateIndexHTML());  // Fallback to embedded HTML
+        }
+    });
+
+    // Serve main page from SPIFFS (explicit index.html path)
+    server->on("/index.html", HTTP_GET, [this](AsyncWebServerRequest *request) {
         if (SPIFFS.exists("/index.html")) {
             request->send(SPIFFS, "/index.html", "text/html");
         } else {
