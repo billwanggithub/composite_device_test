@@ -138,6 +138,7 @@ private:
     void handleSetPWMFreq(AsyncWebServerRequest *request);
     void handleSetPWMDuty(AsyncWebServerRequest *request);
     void handleMotorStop(AsyncWebServerRequest *request);
+    void handleClearError(AsyncWebServerRequest *request);
     void handleSaveSettings(AsyncWebServerRequest *request);
     void handleLoadSettings(AsyncWebServerRequest *request);
     void handleResetSettings(AsyncWebServerRequest *request);

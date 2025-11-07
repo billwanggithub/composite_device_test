@@ -252,6 +252,10 @@ void WebServerManager::setupRoutes() {
         handleMotorStop(request);
     });
 
+    server->on("/api/motor/clear-error", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        handleClearError(request);
+    });
+
     server->on("/api/settings/save", HTTP_POST, [this](AsyncWebServerRequest *request) {
         handleSaveSettings(request);
     });
@@ -400,6 +404,11 @@ void WebServerManager::handleMotorStop(AsyncWebServerRequest *request) {
     request->send(200, "application/json", "{\"success\":true}");
 }
 
+void WebServerManager::handleClearError(AsyncWebServerRequest *request) {
+    pMotorControl->clearEmergencyStop();
+    request->send(200, "application/json", "{\"success\":true}");
+}
+
 void WebServerManager::handleSaveSettings(AsyncWebServerRequest *request) {
     if (pMotorSettingsManager->save()) {
         request->send(200, "application/json", "{\"success\":true}");
@@ -473,6 +482,7 @@ String WebServerManager::generateStatusJSON() {
         doc["ramping"] = pMotorControl->isRamping();
         doc["initialized"] = pMotorControl->isInitialized();
         doc["capture_init"] = pMotorControl->isCaptureInitialized();
+        doc["emergencyStop"] = pMotorControl->isEmergencyStopActive();  // Add emergency stop status
 
         // Format uptime as "H:MM:SS"
         unsigned long uptimeMs = pMotorControl->getUptime();
