@@ -3,7 +3,7 @@
 **Date:** 2025-11-07
 **Session:** Web Server Feature Enhancements
 **Base Commit:** 62f8931 (Update repository reference)
-**Latest Commit:** 3320f69 (Fix LED not flashing during emergency stop)
+**Latest Commit:** 42f5d9d (Fix web interface not updating duty value when emergency stop triggers)
 
 ---
 
@@ -16,6 +16,7 @@ This document describes the improvements made to the web server interface, langu
 2. Language preference persistence
 3. LED visibility during initialization
 4. **Emergency stop LED latched alarm (safety-critical)**
+5. **Web interface immediate update on emergency stop**
 
 ---
 
@@ -211,6 +212,73 @@ if (upper == "CLEAR ERROR" || upper == "CLEAR_ERROR" || upper == "RESUME") {
 - `src/CommandParser.cpp` - Added clear commands + HELP text
 
 **Commit:** `3320f69` - Fix LED not flashing during emergency stop
+
+---
+
+### 5. Web Interface Emergency Stop Update
+
+**Problem:** Web interface PWM duty display doesn't immediately update when safety check triggers emergency stop
+**Root Cause:** No WebSocket broadcast sent when emergency stop triggered by safety alert
+**Solution:** Added immediate broadcastStatus() call after safety-triggered emergency stop
+
+**Implementation Details:**
+
+**Problem Background:**
+When emergency stop is triggered by overspeed detection or safety check (not from web button):
+1. Safety check fails → emergencyStop() called → duty set to 0%
+2. NO WebSocket broadcast sent to notify web clients
+3. Web interface shows stale duty value until next periodic broadcast (up to 200ms delay)
+4. User sees "SAFETY ALERT: Emergency stop activated!" but web UI doesn't immediately reflect duty=0%
+
+**Code Analysis:**
+- Web button emergency stop (WebServer.cpp:191-194) DOES call broadcastStatus()
+- Safety check emergency stop (main.cpp:405) did NOT call broadcastStatus()
+- Periodic broadcasts happen every 200ms, causing update delay
+
+**Fix Applied:** (src/main.cpp:406-409)
+```cpp
+motorControl.emergencyStop();
+// Immediately notify web clients that duty is now 0
+if (webServerManager.isRunning()) {
+    webServerManager.broadcastStatus();
+}
+// Set LED to FAST blinking red (error) - 100ms for urgent warning
+statusLED.blinkRed(100);
+```
+
+**Benefits:**
+- ✅ Web interface updates within milliseconds (not 200ms)
+- ✅ Consistent behavior: Both web button and safety check now broadcast immediately
+- ✅ User sees immediate feedback when emergency stop triggers
+- ✅ No stale data displayed to operators
+
+**WebSocket Broadcast Content:**
+```json
+{
+  "type": "status",
+  "rpm": 0.0,
+  "raw_rpm": 0.0,
+  "freq": 10000,
+  "duty": 0.0,        // ← Immediately updated
+  "ramping": false,
+  "uptime": "1:23:45"
+}
+```
+
+**JavaScript Handler Updates:**
+The existing handleMessage() function (WebServer.cpp:1056-1060) handles the update:
+```javascript
+if (data.duty !== undefined) {
+    document.getElementById('pwmDuty').textContent = data.duty.toFixed(1) + '%';
+    document.getElementById('dutySlider').value = data.duty;  // Slider position
+    document.getElementById('dutyDisplay').textContent = data.duty.toFixed(1) + '%';
+}
+```
+
+**Files Changed:**
+- `src/main.cpp` - Added broadcastStatus() after safety-triggered emergency stop
+
+**Commit:** `42f5d9d` - Fix web interface not updating duty value when emergency stop triggers
 
 ---
 
@@ -468,13 +536,13 @@ All changes are backward compatible:
 | src/MotorSettings.cpp | 9 | 0 | Language NVS persistence |
 | src/MotorControl.h | 8 | 0 | Emergency stop status methods |
 | src/MotorControl.cpp | 7 | 0 | Implement emergency stop methods |
-| src/main.cpp | 26 | 9 | LED logic, emergency stop check, setup visibility |
+| src/main.cpp | 30 | 9 | LED logic, emergency stop check, setup visibility, web broadcast |
 | src/CommandParser.cpp | 10 | 1 | Add CLEAR ERROR/RESUME commands |
 | src/StatusLED.h | 7 | 7 | Update documentation |
 | STATUS_LED_GUIDE.md | 140 | 20 | LED updates + latched alarm section |
 | WEB_SERVER_IMPROVEMENTS.md | 95 | 5 | Emergency stop fix documentation |
 
-**Total:** ~324 lines added, ~47 lines removed
+**Total:** ~328 lines added, ~47 lines removed
 
 ---
 
@@ -486,6 +554,7 @@ These improvements significantly enhance the user experience and system safety:
 2. **Persisting preferences** - Language survives page reloads and reboots
 3. **Improving visibility** - LED status always visible during boot and operation
 4. **Enhancing safety** - Critical errors cannot be missed with latched alarm pattern
+5. **Web interface responsiveness** - Emergency stop status updates immediately, not delayed
 
 **Safety-Critical Fix:**
 
@@ -499,14 +568,21 @@ All changes are production-ready and thoroughly tested.
 
 ---
 
-**Document Version:** 1.1
+**Document Version:** 1.2
 **Last Updated:** 2025-11-07
 **Author:** Claude (Anthropic AI)
 **Review Status:** Complete
 **Implementation Status:** Merged to branch `claude/clone-arduino-webserver-011CUsix8cqsPbNXCgK5kEMZ`
+
+**Version 1.2 Changes:**
+- Added section 5: Web Interface Emergency Stop Update
+- Documented WebSocket broadcast fix for safety-triggered emergency stops
+- Updated file change summary (main.cpp lines increased)
+- Commit: 42f5d9d
 
 **Version 1.1 Changes:**
 - Added emergency stop latched alarm section
 - Documented CLEAR ERROR/RESUME commands
 - Added comprehensive testing instructions for emergency stop
 - Updated file change summary with emergency stop files
+- Commit: 3320f69
