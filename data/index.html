@@ -1,0 +1,1885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Motor Control Dashboard</title>
+    <!-- 版本標記: v2.1 - 2025-11-04 - Added adjustable RPM chart update rate (20ms-200ms) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .page-wrapper {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: transparent;
+        }
+        
+        .language-bar {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px 20px;
+            text-align: right;
+            border-radius: 10px 10px 0 0;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(5px);
+        }
+        
+        .language-bar label {
+            font-weight: bold;
+            margin-right: 10px;
+            color: #2c3e50;
+            font-size: 14px;
+        }
+        
+        .language-bar select {
+            background: white;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 5px 10px;
+            font-size: 14px;
+            min-width: 130px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .language-bar select:hover {
+            border-color: #667eea;
+            transform: translateY(-1px);
+        }
+        
+        .language-bar select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 10px rgba(102, 126, 234, 0.3);
+        }
+        
+        .navigation-bar {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px 20px;
+            text-align: center;
+            border-radius: 0;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(5px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .nav-link {
+            background: #667eea;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+        
+        .nav-link:hover {
+            background: #5a6fd8;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        
+        .nav-link.active {
+            background: #764ba2;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 0 0 20px 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .header-content {
+            margin-bottom: 0;
+        }
+        
+        .title {
+            font-size: 3em;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 5px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .subtitle {
+            font-size: 1.5em;
+            color: #7f8c8d;
+            font-weight: 300;
+            margin-bottom: 20px;
+        }
+        
+        .status-group {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 15px;
+            padding: 15px;
+            background: rgba(236, 240, 241, 0.5);
+            border-radius: 10px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .status-box {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 8px;
+            min-width: 200px;
+        }
+        
+        .status-box .status-label {
+            font-size: 0.95em;
+            color: #2c3e50;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        
+        .status-box .status-value {
+            display: flex;
+            align-items: center;
+            font-size: 0.95em;
+            font-weight: 500;
+            color: #2c3e50;
+            gap: 5px;
+        }
+        
+        .rpm-display {
+            text-align: center;
+            margin: 30px 0;
+            padding: 30px;
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(79, 172, 254, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .pole-pairs-section {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 2px solid #e0e0e0;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+        }
+        
+        .pole-pairs-section .control-label {
+            margin-bottom: 0;
+            font-weight: 600;
+            color: #2c3e50;
+            white-space: nowrap;
+        }
+        
+        .rpm-display::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.1) 50%, transparent 70%);
+            animation: shimmer 3s infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        
+        .rpm-value {
+            font-size: 4em;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.3);
+            position: relative;
+            z-index: 1;
+        }
+        
+        .rpm-label {
+            font-size: 1.5em;
+            color: rgba(255, 255, 255, 0.9);
+            margin-top: 10px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .control-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .pwm-control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .pwm-control-group .control-panel {
+            border: 2px solid #e0e0e0;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        .control-panel {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e9ecef;
+        }
+        
+        .panel-title {
+            font-size: 1.4em;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            text-align: center;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #3498db;
+        }
+        
+        .control-group {
+            margin-bottom: 20px;
+        }
+        
+        .control-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #555;
+        }
+        
+        .input-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .step-size-group {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 10px;
+            margin-left: 15px;
+            margin-bottom: 0;
+        }
+        
+        .step-size-group .control-label {
+            margin-bottom: 0;
+            white-space: nowrap;
+        }
+        
+        .step-size-group .select-dropdown {
+            width: auto;
+            min-width: 100px;
+        }
+        
+        .slider {
+            flex: 1;
+            height: 8px;
+            border-radius: 5px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #3498db;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(52, 152, 219, 0.3);
+        }
+        
+        .number-input {
+            width: 120px;
+            padding: 8px 12px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 1em;
+            text-align: center;
+            transition: border-color 0.3s;
+        }
+        
+        .number-input:focus {
+            border-color: #3498db;
+            outline: none;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 500;
+            transition: all 0.3s;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .btn-primary {
+            background: #3498db;
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: #95a5a6;
+            color: white;
+        }
+        
+        .btn-success {
+            background: #2ecc71;
+            color: white;
+        }
+        
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 0.9em;
+        }
+        
+        .select-dropdown {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 1em;
+            background: white;
+            cursor: pointer;
+        }
+        
+        .select-dropdown:focus {
+            border-color: #3498db;
+            outline: none;
+        }
+        
+        .preset-buttons {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .preset-btn {
+            padding: 12px;
+            background: #ecf0f1;
+            border: 2px solid #bdc3c7;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        
+        .preset-btn:hover {
+            background: #3498db;
+            color: white;
+            border-color: #3498db;
+        }
+        
+        .status-panel {
+            background: #2c3e50;
+            color: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 30px;
+            box-shadow: 0 5px 15px rgba(44, 62, 80, 0.3);
+        }
+        
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        
+        .status-item {
+            text-align: center;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            backdrop-filter: blur(5px);
+        }
+        
+        .status-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .status-label {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        
+        .connection-status {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+        
+        .connected {
+            background: #2ecc71;
+        }
+        
+        .disconnected {
+            background: #e74c3c;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .save-load-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            background: #2ecc71;
+            color: white;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transform: translateX(100%);
+            transition: transform 0.3s;
+            z-index: 1000;
+        }
+        
+        .toast.show {
+            transform: translateX(0);
+        }
+        
+        .toast.error {
+            background: #e74c3c;
+        }
+        
+        @media (max-width: 768px) {
+            .control-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .container {
+                padding: 20px;
+                margin: 10px;
+            }
+            
+            .rpm-value {
+                font-size: 3em;
+            }
+            
+            .status-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .title {
+                font-size: 2em;
+            }
+            
+            .subtitle {
+                font-size: 1.2em;
+            }
+            
+            .status-group {
+                flex-direction: column;
+                gap: 15px;
+                align-items: stretch;
+            }
+            
+            .status-box {
+                min-width: auto;
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page-wrapper">
+        <!-- Language Selector Bar at the Top -->
+        <div class="language-bar">
+            <select id="languageSelect" class="select-dropdown">
+                <option value="en">🇺🇸 English</option>
+                <option value="zh-CN">🇨🇳 简体中文</option>
+            </select>
+        </div>
+
+        <!-- Navigation Bar -->
+        <div class="navigation-bar">
+            <div class="nav-links">
+                <a href="/index.html" class="nav-link active" data-i18n="dashboard">Dashboard</a>
+                <a href="/settings.html" class="nav-link" data-i18n="settings">Settings</a>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="header">
+                <div class="header-content">
+                    <h1 class="title" id="pageTitle">ESP32 Motor Control</h1>
+                    <p class="subtitle" id="pageSubtitle">PWM & RPM Monitor</p>
+                </div>
+            
+            <!-- Status Group for BLE and WiFi -->
+            <div class="status-group">
+                <div class="status-box">
+                    <div class="status-label" data-i18n="wifi">WiFi</div>
+                    <div class="status-value">
+                        <span class="connection-status disconnected" id="wifiStatusHeader"></span>
+                        <span id="wifiIpHeader" data-i18n="not-connected">Not Connected</span>
+                    </div>
+                </div>
+                
+                <div class="status-box">
+                    <div class="status-label" data-i18n="ble">BLE</div>
+                    <div class="status-value">
+                        <span class="connection-status disconnected" id="bleStatus"></span>
+                        <span id="bleDeviceName">---</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Pole Pairs Section - Positioned above RPM display -->
+        <div class="pole-pairs-section">
+            <label class="control-label" data-i18n="pole-pairs">Pole Pairs</label>
+            <select class="select-dropdown" id="polePairsSelect">
+                <option value="1">1</option>
+                <option value="2" selected>2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+                <option value="9">9</option>
+                <option value="10">10</option>
+                <option value="11">11</option>
+                <option value="12">12</option>
+            </select>
+        </div>
+        
+        <!-- RPM Display with embedded Toggle -->
+        <div class="rpm-display" style="position: relative;">
+            <div class="rpm-value" id="rpmValue">0.0</div>
+            <div class="rpm-label" id="rpmLabel" onclick="toggleRpmRps()" style="cursor: pointer; user-select: none;" title="Click to switch between RPM and Real Input Frequency">RPM</div>
+            
+            <!-- RPM Monitor Toggle - positioned in bottom right -->
+            <div style="position: absolute; bottom: 15px; right: 15px; z-index: 10;">
+                <label style="display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 14px; cursor: pointer; background: rgba(255, 255, 255, 0.2); padding: 5px 8px; border-radius: 8px; backdrop-filter: blur(5px);">
+                    <input type="checkbox" id="rpmMonitorToggle" style="width: 16px; height: 16px; accent-color: #2ecc71;">
+                    <span style="color: white; font-weight: 500; font-size: 16px;">📈</span>
+                </label>
+            </div>
+        </div>
+        
+        <!-- RPM Monitor Section -->
+        <div class="control-panel" id="rpmMonitorPanel" style="margin-top: 15px; display: none;">
+            <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 0;">
+                <div style="display: flex; align-items: center; gap: 20px;">
+                    <label style="display: flex; align-items: center; gap: 5px; font-size: 14px; cursor: pointer;">
+                        <input type="checkbox" id="rpmRefreshCheckbox" checked style="width: 16px; height: 16px; accent-color: #2ecc71;">
+                        <span style="color: #2ecc71; font-weight: 500;">REFRESH</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 5px; font-size: 14px; cursor: pointer;">
+                        <input type="checkbox" id="rpmAutoScaleCheckbox" checked style="width: 16px; height: 16px; accent-color: #333;">
+                        <span style="color: #333; font-weight: 500;">Auto scale</span>
+                    </label>
+                    <button id="rpmResetBtn" class="btn btn-secondary btn-small" style="padding: 6px 12px; font-size: 12px; display: flex; align-items: center; gap: 5px;">
+                        🔄 Reset
+                    </button>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 20px; margin-top: 8px;">
+                <label style="display: flex; align-items: center; gap: 5px; font-size: 14px;">
+                    <span style="color: #333; font-weight: 500;">Max Points</span>
+                    <input type="number" id="rpmMaxPointsInput" min="10" max="1000" value="100" step="10" style="width: 70px; padding: 4px 6px; font-size: 13px; border-radius: 5px; border: 1px solid #ccc;">
+                </label>
+            </div>
+            
+            <!-- RPM Chart -->
+            <div style="background: white; border-radius: 15px; padding: 20px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);">
+                <canvas id="rpmChart" style="max-height: 400px;"></canvas>
+            </div>
+        </div>
+        
+        <!-- PWM Control Group - Vertical Layout as per specification -->
+        <div class="pwm-control-group">
+            <!-- PWM Duty Control - Positioned right below RPM display -->
+            <div class="control-panel">
+                <h3 class="panel-title" data-i18n="pwm-duty-control">PWM Duty Control</h3>
+                
+                <div class="control-group">
+                    <div class="input-group">
+                        <label class="control-label" data-i18n="duty-cycle">Duty Cycle (%)</label>
+                        <input type="number" class="number-input" id="dutyInput" min="0" max="100" value="0" step="0.1">
+                    </div>
+                    <div class="input-group">
+                        <button class="btn btn-secondary btn-small" id="dutyDownBtn">-</button>
+                        <input type="range" class="slider" id="dutySlider" min="0" max="100" value="0" step="0.1">
+                        <button class="btn btn-secondary btn-small" id="dutyUpBtn">+</button>
+                    </div>
+                    <div class="step-size-group">
+                        <label class="control-label" data-i18n="step-size">Step Size</label>
+                        <select class="select-dropdown" id="dutyStepSelect">
+                            <option value="0.1">0.1%</option>
+                            <option value="1" selected>1%</option>
+                            <option value="5">5%</option>
+                            <option value="10">10%</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <label class="control-label" data-i18n="duty-presets">Duty Presets</label>
+                    <div class="preset-buttons">
+                        <button class="preset-btn" data-duty="0">0%</button>
+                        <button class="preset-btn" data-duty="10">10%</button>
+                        <button class="preset-btn" data-duty="25">25%</button>
+                        <button class="preset-btn" data-duty="50">50%</button>
+                        <button class="preset-btn" data-duty="75">75%</button>
+                        <button class="preset-btn" data-duty="100">100%</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- PWM Frequency Control - Positioned right below duty controls -->
+            <div class="control-panel">
+                <h3 class="panel-title" data-i18n="pwm-frequency-control">PWM Frequency Control</h3>
+                
+                <div class="control-group">
+                    <div class="input-group">
+                        <label class="control-label" data-i18n="max-frequency-limit">Max Frequency Limit</label>
+                        <select class="select-dropdown" id="maxFreqSelect">
+                            <option value="1000">1 kHz</option>
+                            <option value="10000">10 kHz</option>
+                            <option value="50000">50 kHz</option>
+                            <option value="100000" selected>100 kHz</option>
+                            <option value="500000">500 kHz</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <div class="input-group">
+                        <label class="control-label" data-i18n="frequency">Frequency (Hz)</label>
+                        <input type="number" class="number-input" id="freqInput" min="10" max="500000" value="10000">
+                    </div>
+                    <div class="input-group">
+                        <button class="btn btn-secondary btn-small" id="freqDownBtn">-</button>
+                        <input type="range" class="slider" id="freqSlider" min="10" max="10000" value="10000" step="10">
+                        <button class="btn btn-secondary btn-small" id="freqUpBtn">+</button>
+                    </div>
+                    <div class="step-size-group">
+                        <label class="control-label" data-i18n="step-size">Step Size</label>
+                        <select class="select-dropdown" id="freqStepSelect">
+                            <option value="1">1 Hz</option>
+                            <option value="10" selected>10 Hz</option>
+                            <option value="100">100 Hz</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="save-load-buttons">
+            <button class="btn btn-success" id="saveBtn" data-i18n="save-settings">Save Settings</button>
+            <button class="btn btn-primary" id="loadBtn" data-i18n="load-settings">Load Settings</button>
+        </div>
+        
+        <div class="status-panel">
+            <h3 class="panel-title" style="color: white; border-color: #3498db;" data-i18n="system-status">System Status</h3>
+            <div class="status-grid">
+                <div class="status-item">
+                    <div class="status-value" id="statusFreq">0 Hz</div>
+                    <div class="status-label" data-i18n="pwm-frequency">Current Frequency</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-value" id="statusDuty">0.0%</div>
+                    <div class="status-label" data-i18n="pwm-duty">Current Duty</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-value" id="statusPoles">1</div>
+                    <div class="status-label" data-i18n="pole-pairs">Pole Pairs</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-value" id="statusUptime">00:00:00</div>
+                    <div class="status-label" data-i18n="system-uptime">System Uptime</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-value">
+                        <span class="connection-status disconnected" id="wifiStatus"></span>
+                        <span id="wifiText">Disconnected</span>
+                    </div>
+                    <div class="status-label" data-i18n="wifi">WiFi Status</div>
+                    <div id="wifiIp" style="font-size: 0.85em; margin-top: 5px; opacity: 0.9;"></div>
+                </div>
+                <div class="status-item">
+                    <div class="status-value" id="statusHeap">0 KB</div>
+                    <div class="status-label" data-i18n="free-heap">Free Memory</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-value" id="statusVersion">---</div>
+                    <div class="status-label" data-i18n="firmware-version">Firmware Version</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+    
+    <script>
+        // Global variables
+        let updateInterval;
+        let rpmDisplayUpdateInterval; // Separate interval for RPM display updates
+        let debounceTimer;
+        let syncTimer; // Timer for cross-page synchronization
+        let displayMode = 'rpm'; // 'rpm' or 'freq' (real input frequency)
+
+        // RPM Monitor variables
+        let rpmChart = null;
+        let rpmData = [];
+        let timeLabels = [];
+        let rpmStartTime = null;
+        let rpmChartUpdateInterval = null; // Interval for RPM chart data fetching
+        let rpmRefreshEnabled = false;
+        let rpmAutoScaleEnabled = true;
+        let maxRpmDataPoints = 100;
+        let rpmUpdateFrequency = 100; // Default: 100ms (10 Hz)
+        
+        // DOM elements
+        const elements = {
+            rpmValue: document.getElementById('rpmValue'),
+            rpmLabel: document.getElementById('rpmLabel'),
+            polePairsSelect: document.getElementById('polePairsSelect'),
+            freqSlider: document.getElementById('freqSlider'),
+            freqInput: document.getElementById('freqInput'),
+            dutySlider: document.getElementById('dutySlider'),
+            dutyInput: document.getElementById('dutyInput'),
+            maxFreqSelect: document.getElementById('maxFreqSelect'),
+            freqStepSelect: document.getElementById('freqStepSelect'),
+            dutyStepSelect: document.getElementById('dutyStepSelect'),
+            freqUpBtn: document.getElementById('freqUpBtn'),
+            freqDownBtn: document.getElementById('freqDownBtn'),
+            dutyUpBtn: document.getElementById('dutyUpBtn'),
+            dutyDownBtn: document.getElementById('dutyDownBtn'),
+            saveBtn: document.getElementById('saveBtn'),
+            loadBtn: document.getElementById('loadBtn'),
+            statusFreq: document.getElementById('statusFreq'),
+            statusDuty: document.getElementById('statusDuty'),
+            statusPoles: document.getElementById('statusPoles'),
+            statusUptime: document.getElementById('statusUptime'),
+            wifiStatus: document.getElementById('wifiStatus'),
+            wifiStatusHeader: document.getElementById('wifiStatusHeader'),
+            wifiIpHeader: document.getElementById('wifiIpHeader'),
+            bleStatus: document.getElementById('bleStatus'),
+            bleDeviceName: document.getElementById('bleDeviceName'),
+            statusHeap: document.getElementById('statusHeap'),
+            pageTitle: document.getElementById('pageTitle'),
+            pageSubtitle: document.getElementById('pageSubtitle'),
+            toast: document.getElementById('toast'),
+            languageSelect: document.getElementById('languageSelect'),
+            statusVersion: document.getElementById('statusVersion')
+        };
+        
+        // Translation dictionaries
+        const translations = {
+            en: {
+                // Language selector
+                'language': 'Language',
+                
+                // Header
+                'wifi': 'WiFi',
+                'ble': 'BLE',
+                'not-connected': 'Not Connected',
+                
+                // Pole Pairs
+                'pole-pairs': 'Pole Pairs',
+                'pole-pairs-1': '1 pole pair',
+                'pole-pairs-n': '{n} pole pairs',
+                
+                // Duty Control
+                'pwm-duty-control': 'PWM Duty Control',
+                'duty-cycle': 'Duty Cycle (%)',
+                'step-size': 'Step Size',
+                'duty-presets': 'Duty Presets',
+                
+                // Frequency Control
+                'pwm-frequency-control': 'PWM Frequency Control',
+                'max-frequency-limit': 'Max Frequency Limit',
+                'frequency': 'Frequency (Hz)',
+                
+                // Buttons
+                'save-settings': 'Save Settings',
+                'load-settings': 'Load Settings',
+                'apply-configuration': 'Apply Configuration',
+                'load-configuration': 'Load Configuration',
+                'save-to-eeprom': 'Save to EEPROM',
+                
+                // Status Panel
+                'system-status': 'System Status',
+                'pwm-frequency': 'PWM Frequency',
+                'pwm-duty': 'PWM Duty',
+                'system-uptime': 'System Uptime',
+                'free-heap': 'Free Heap',
+                'firmware-version': 'Firmware Version',
+                
+                // Configuration Panel
+                'configuration': 'Configuration',
+                'web-title': 'Web Title',
+                'web-subtitle': 'Web Subtitle',
+                'ble-device-name': 'BLE Device Name',
+                
+                // Toast Messages
+                'settings-saved': 'Settings saved successfully',
+                'settings-loaded': 'Settings loaded successfully',
+                'config-saved': 'Configuration saved successfully!',
+                'config-loaded': 'Configuration loaded successfully!',
+                'config-persisted': 'Configuration persisted to EEPROM!',
+                'pwm-updated': 'PWM settings updated successfully',
+                'pole-pairs-updated': 'Pole pairs updated',
+                'all-fields-required': 'All fields are required!',
+                'connection-error': 'Connection error',
+                'error-saving': 'Error saving settings',
+                'error-loading': 'Error loading settings',
+                'error-config': 'Failed to save configuration!',
+                'error-load-config': 'Failed to load configuration!',
+                'error-pwm': 'Error updating PWM settings',
+
+                // LED Brightness
+                'led-brightness': 'RGB LED Brightness',
+                'set-led-brightness': 'Set LED Brightness',
+                'led-brightness-set': 'LED brightness set',
+                'error': 'Error',
+
+                // Navigation
+                'dashboard': 'Dashboard',
+                'settings': 'Settings'
+            },
+            'zh-CN': {
+                // Language selector
+                'language': '语言',
+                
+                // Header
+                'wifi': 'WiFi',
+                'ble': '蓝牙',
+                'not-connected': '未连接',
+                
+                // Pole Pairs
+                'pole-pairs': '极对数',
+                'pole-pairs-1': '1 极对',
+                'pole-pairs-n': '{n} 极对',
+                
+                // Duty Control
+                'pwm-duty-control': 'PWM 占空比控制',
+                'duty-cycle': '占空比 (%)',
+                'step-size': '步进大小',
+                'duty-presets': '占空比预设',
+                
+                // Frequency Control
+                'pwm-frequency-control': 'PWM 频率控制',
+                'max-frequency-limit': '最大频率限制',
+                'frequency': '频率 (Hz)',
+                
+                // Buttons
+                'save-settings': '保存设置',
+                'load-settings': '加载设置',
+                'apply-configuration': '应用配置',
+                'load-configuration': '加载配置',
+                'save-to-eeprom': '保存到 EEPROM',
+                
+                // Status Panel
+                'system-status': '系统状态',
+                'pwm-frequency': 'PWM 频率',
+                'pwm-duty': 'PWM 占空比',
+                'system-uptime': '系统运行时间',
+                'free-heap': '可用内存',
+                'firmware-version': '固件版本',
+                
+                // Configuration Panel
+                'configuration': '配置',
+                'web-title': '网页标题',
+                'web-subtitle': '网页副标题',
+                'ble-device-name': '蓝牙设备名称',
+                
+                // Toast Messages
+                'settings-saved': '设置保存成功',
+                'settings-loaded': '设置加载成功',
+                'config-saved': '配置保存成功！',
+                'config-loaded': '配置加载成功！',
+                'config-persisted': '配置已保存到 EEPROM！',
+                'pwm-updated': 'PWM 设置更新成功',
+                'pole-pairs-updated': '极对数已更新',
+                'all-fields-required': '所有字段都是必填的！',
+                'connection-error': '连接错误',
+                'error-saving': '保存设置时出错',
+                'error-loading': '加载设置时出错',
+                'error-config': '保存配置失败！',
+                'error-load-config': '加载配置失败！',
+                'error-pwm': '更新 PWM 设置时出错',
+
+                // LED Brightness
+                'led-brightness': 'RGB LED 亮度',
+                'set-led-brightness': '设置 LED 亮度',
+                'led-brightness-set': 'LED 亮度已设置',
+                'error': '错误',
+
+                // Navigation
+                'dashboard': '主控制台',
+                'settings': '系统设置'
+            }
+        };
+        
+        // Current language
+        let currentLanguage = 'en';
+        
+        // Apply language to UI
+        function applyLanguage(lang, saveToBackend = false) {
+            currentLanguage = lang;
+            const t = translations[lang];
+
+            // Update all elements with data-i18n attribute
+            document.querySelectorAll('[data-i18n]').forEach(element => {
+                const key = element.getAttribute('data-i18n');
+                if (t[key]) {
+                    element.textContent = t[key];
+                }
+            });
+
+            // Save language preference to localStorage
+            localStorage.setItem('language', lang);
+
+            // Update language on backend only when explicitly requested (user changed language)
+            if (saveToBackend) {
+                fetch('/api/config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ language: lang })
+                }).then(response => response.json())
+                  .then(data => {
+                      if (data.success) {
+                          console.log('✅ Language saved to backend:', lang);
+                      }
+                  })
+                  .catch(error => {
+                      console.error('❌ Error saving language:', error);
+                  });
+            }
+        }
+        
+        // Get translated text
+        function t(key) {
+            return translations[currentLanguage][key] || key;
+        }
+        
+        // Initialize the application
+        async function init() {
+            // CRITICAL: Load language FIRST from backend to ensure correct display
+            try {
+                const response = await fetch('/api/config');
+                const data = await response.json();
+
+                if (data.language) {
+                    console.log('✅ Language loaded from backend:', data.language);
+                    elements.languageSelect.value = data.language;
+                    applyLanguage(data.language);  // Don't save back to backend
+                } else {
+                    console.log('⚠️ No language in API response, using default');
+                    elements.languageSelect.value = 'en';
+                    applyLanguage('en');
+                }
+
+                // Load RPM update rate from backend
+                if (data.rpmUpdateRate !== undefined) {
+                    rpmUpdateFrequency = data.rpmUpdateRate;
+                    console.log('RPM update rate loaded from backend:', rpmUpdateFrequency, 'ms');
+                }
+            } catch (error) {
+                console.error('❌ Error loading config from backend:', error);
+                // Fallback to localStorage only if API fails
+                const savedLang = localStorage.getItem('language') || 'en';
+                console.log('⚠️ Fallback to localStorage:', savedLang);
+                elements.languageSelect.value = savedLang;
+                applyLanguage(savedLang);
+            }
+
+            setupEventListeners();
+            updateMaxFrequencyLimit();
+            startUpdateLoop();
+            loadSettings();
+            loadConfiguration();
+
+            // Initialize RPM refresh state to match checkbox
+            const rpmRefreshCheckbox = document.getElementById('rpmRefreshCheckbox');
+            rpmRefreshEnabled = rpmRefreshCheckbox.checked;
+
+            // Start RPM data fetching if monitor is visible and refresh is enabled
+            const rpmMonitorPanel = document.getElementById('rpmMonitorPanel');
+            if (rpmMonitorPanel.style.display !== 'none' && rpmRefreshEnabled) {
+                if (!rpmChart) {
+                    initializeRpmChart();
+                }
+                startRpmDataFetching(true); // Clear data for new session
+            }
+
+            // Load display mode preference (RPM/Real Input Frequency)
+            displayMode = localStorage.getItem('displayMode') || 'rpm';
+            elements.rpmLabel.textContent = displayMode === 'rpm' ? 'RPM' : 'INPUT HZ';
+            
+            // Cross-page synchronization
+            // Listen for settings updates from settings page
+            window.addEventListener('storage', function(e) {
+                // 監聽語言變更
+                if (e.key === 'language' && e.newValue !== null) {
+                    const newLang = e.newValue;
+                    if (newLang !== currentLanguage) {
+                        console.log('Language changed from another page:', newLang);
+                        elements.languageSelect.value = newLang;
+                        applyLanguage(newLang);
+                    }
+                }
+
+                if (e.key === 'settingsUpdated' && e.newValue !== null) {
+                    // Settings were updated in settings page, reload config
+                    fetch('/api/config')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.rpmUpdateRate !== undefined) {
+                                rpmUpdateFrequency = data.rpmUpdateRate;
+                                console.log('RPM update rate reloaded:', rpmUpdateFrequency, 'ms');
+
+                                // Restart RPM data fetching if active
+                                if (rpmChartUpdateInterval) {
+                                    stopRpmDataFetching();
+                                    setTimeout(() => {
+                                        if (rpmRefreshEnabled) {
+                                            startRpmDataFetching(false);
+                                        }
+                                    }, 100);
+                                }
+                            }
+
+                            // Update page title and subtitle if changed
+                            if (data.title) {
+                                document.getElementById('pageTitle').textContent = data.title;
+                            }
+                            if (data.subtitle) {
+                                document.getElementById('pageSubtitle').textContent = data.subtitle;
+                            }
+                        })
+                        .catch(error => console.error('Error reloading config:', error));
+                }
+
+                if (e.key === 'currentDuty' && e.newValue !== null) {
+                    const duty = parseFloat(e.newValue);
+                    if (!isNaN(duty)) {
+                        // Update duty controls without triggering API call
+                        elements.dutySlider.value = duty;
+                        elements.dutyInput.value = duty;
+                        // Update status display to show the current duty
+                        elements.statusDuty.textContent = `${duty.toFixed(1)}%`;
+                    }
+                }
+                if (e.key === 'currentFrequency' && e.newValue !== null) {
+                    const frequency = parseInt(e.newValue);
+                    if (!isNaN(frequency)) {
+                        // Update frequency controls
+                        elements.freqSlider.value = frequency;
+                        elements.freqInput.value = frequency;
+                        // Update status display to show the current frequency
+                        elements.statusFreq.textContent = `${frequency} Hz`;
+                        
+                        // Send frequency change to ESP32 to keep it in sync
+                        // Use a timeout to avoid conflicts with rapid changes
+                        clearTimeout(syncTimer);
+                        syncTimer = setTimeout(() => {
+                            updatePWM();
+                        }, 500); // Wait 500ms after last change
+                    }
+                }
+            });
+            
+            // Load initial duty value from localStorage
+            const savedDuty = localStorage.getItem('currentDuty');
+            if (savedDuty !== null) {
+                const duty = parseFloat(savedDuty);
+                if (!isNaN(duty)) {
+                    elements.dutySlider.value = duty;
+                    elements.dutyInput.value = duty;
+                }
+            }
+            
+            // Load initial frequency value from localStorage
+            const savedFreq = localStorage.getItem('currentFrequency');
+            if (savedFreq !== null) {
+                const frequency = parseInt(savedFreq);
+                if (!isNaN(frequency)) {
+                    elements.freqSlider.value = frequency;
+                    elements.freqInput.value = frequency;
+                }
+            } else {
+                // Set default frequency if none saved
+                localStorage.setItem('currentFrequency', '10000');
+                elements.freqSlider.value = '10000';
+                elements.freqInput.value = '10000';
+            }
+        }
+        
+        // Setup all event listeners
+        function setupEventListeners() {
+            // RPM max points input
+            const rpmMaxPointsInput = document.getElementById('rpmMaxPointsInput');
+            rpmMaxPointsInput.addEventListener('change', function() {
+                let val = parseInt(this.value);
+                if (isNaN(val) || val < 10) val = 10;
+                if (val > 1000) val = 1000;
+                maxRpmDataPoints = val;
+                this.value = val;
+                // Trim data arrays if needed
+                while (rpmData.length > maxRpmDataPoints) {
+                    rpmData.shift();
+                    timeLabels.shift();
+                }
+                if (rpmChart) {
+                    rpmChart.data.labels = [...timeLabels];
+                    rpmChart.data.datasets[0].data = [...rpmData];
+                    rpmChart.update();
+                }
+                showToast('Max points set to ' + val, 'success');
+            });
+            // Frequency controls
+            elements.freqSlider.addEventListener('input', () => {
+                elements.freqInput.value = elements.freqSlider.value;
+                // Immediately update localStorage for cross-page synchronization
+                localStorage.setItem('currentFrequency', elements.freqSlider.value);
+                debouncedUpdate();
+            });
+            
+            elements.freqInput.addEventListener('input', () => {
+                elements.freqSlider.value = elements.freqInput.value;
+                // Immediately update localStorage for cross-page synchronization
+                localStorage.setItem('currentFrequency', elements.freqInput.value);
+                debouncedUpdate();
+            });
+            
+            elements.freqUpBtn.addEventListener('click', () => {
+                adjustFrequency(parseInt(elements.freqStepSelect.value));
+            });
+            
+            elements.freqDownBtn.addEventListener('click', () => {
+                adjustFrequency(-parseInt(elements.freqStepSelect.value));
+            });
+            
+            // Duty controls
+            elements.dutySlider.addEventListener('input', () => {
+                elements.dutyInput.value = elements.dutySlider.value;
+                // Immediately update localStorage for cross-page synchronization
+                localStorage.setItem('currentDuty', elements.dutySlider.value);
+                debouncedUpdate();
+            });
+            
+            elements.dutyInput.addEventListener('input', () => {
+                elements.dutySlider.value = elements.dutyInput.value;
+                // Immediately update localStorage for cross-page synchronization
+                localStorage.setItem('currentDuty', elements.dutyInput.value);
+                debouncedUpdate();
+            });
+            
+            elements.dutyUpBtn.addEventListener('click', () => {
+                adjustDuty(parseFloat(elements.dutyStepSelect.value));
+            });
+            
+            elements.dutyDownBtn.addEventListener('click', () => {
+                adjustDuty(-parseFloat(elements.dutyStepSelect.value));
+            });
+            
+            // Max frequency limit
+            elements.maxFreqSelect.addEventListener('change', updateMaxFrequencyLimit);
+            
+            // Pole pairs selection
+            elements.polePairsSelect.addEventListener('change', updatePolePairs);
+            
+            // Step size changes
+            elements.dutyStepSelect.addEventListener('change', () => {
+                const stepSize = parseFloat(elements.dutyStepSelect.value);
+                elements.dutySlider.step = stepSize;
+                elements.dutyInput.step = stepSize;
+                updateStepSizes();
+            });
+            
+            elements.freqStepSelect.addEventListener('change', () => {
+                const stepSize = parseFloat(elements.freqStepSelect.value);
+                elements.freqSlider.step = stepSize;
+                elements.freqInput.step = stepSize;
+                updateStepSizes();
+            });
+            
+            // Preset buttons
+            document.querySelectorAll('.preset-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const duty = parseFloat(btn.dataset.duty);
+                    elements.dutySlider.value = duty;
+                    elements.dutyInput.value = duty;
+                    updatePWM();
+                });
+            });
+            
+            // Save/Load buttons
+            elements.saveBtn.addEventListener('click', saveSettings);
+            elements.loadBtn.addEventListener('click', loadSettings);
+            
+            // Language selector
+            elements.languageSelect.addEventListener('change', () => {
+                applyLanguage(elements.languageSelect.value, true);  // Save to backend when user changes language
+            });
+            
+            // RPM Monitor event listeners
+            const rpmMonitorToggle = document.getElementById('rpmMonitorToggle');
+            const rpmRefreshCheckbox = document.getElementById('rpmRefreshCheckbox');
+            const rpmAutoScaleCheckbox = document.getElementById('rpmAutoScaleCheckbox');
+            const rpmResetBtn = document.getElementById('rpmResetBtn');
+            
+            rpmMonitorToggle.addEventListener('change', function() {
+                toggleRpmMonitor(this.checked);
+            });
+            
+            rpmRefreshCheckbox.addEventListener('change', function() {
+                rpmRefreshEnabled = this.checked;
+                if (this.checked && document.getElementById('rpmMonitorPanel').style.display !== 'none') {
+                    startRpmDataFetching(false); // Don't clear data when resuming
+                } else {
+                    stopRpmDataFetching();
+                }
+            });
+            
+            rpmAutoScaleCheckbox.addEventListener('change', function() {
+                rpmAutoScaleEnabled = this.checked;
+            });
+            
+            rpmResetBtn.addEventListener('click', function() {
+                resetRpmData();
+            });
+        }
+        
+        // Debounced update function
+        function debouncedUpdate() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(updatePWM, 300);
+        }
+        
+        // Adjust frequency with step
+        function adjustFrequency(step) {
+            const current = parseInt(elements.freqInput.value);
+            const maxFreq = parseInt(elements.maxFreqSelect.value);
+            const newValue = Math.max(10, Math.min(maxFreq, current + step));
+            
+            elements.freqSlider.value = newValue;
+            elements.freqInput.value = newValue;
+            // Immediately update localStorage for cross-page synchronization
+            localStorage.setItem('currentFrequency', newValue.toString());
+            updatePWM();
+        }
+        
+        // Adjust duty with step
+        function adjustDuty(step) {
+            const current = parseFloat(elements.dutyInput.value);
+            const newValue = Math.max(0, Math.min(100, current + step));
+            
+            elements.dutySlider.value = newValue;
+            elements.dutyInput.value = newValue;
+            // Immediately update localStorage for cross-page synchronization
+            localStorage.setItem('currentDuty', newValue.toString());
+            updatePWM();
+        }
+        
+        // Toggle between RPM and Real Input Frequency display
+        function toggleRpmRps() {
+            displayMode = displayMode === 'rpm' ? 'freq' : 'rpm';
+            elements.rpmLabel.textContent = displayMode === 'rpm' ? 'RPM' : 'INPUT HZ';
+            
+            // Update the display immediately with current data
+            updateStatusDisplay();
+            
+            // Save preference to localStorage
+            localStorage.setItem('displayMode', displayMode);
+            
+            // Show toast notification
+            const message = displayMode === 'rpm' ? 'Switched to RPM (Revolutions Per Minute)' : 'Switched to Real Input Frequency (Hz)';
+            showToast(message, 'success');
+        }
+        
+        // RPM Monitor Functions
+        function initializeRpmChart() {
+            const ctx = document.getElementById('rpmChart').getContext('2d');
+            
+            rpmChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [...timeLabels],
+                    datasets: [{
+                        label: 'RPM',
+                        data: [...rpmData],
+                        borderColor: '#3498db',
+                        backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 2,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Time (seconds)'
+                            },
+                            grid: {
+                                color: 'rgba(0,0,0,0.1)'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'RPM'
+                            },
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(0,0,0,0.1)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false,
+                            position: 'top'
+                        }
+                    }
+                }
+            });
+        }
+        
+        function toggleRpmMonitor(show) {
+            const panel = document.getElementById('rpmMonitorPanel');
+            const rpmRefreshCheckbox = document.getElementById('rpmRefreshCheckbox');
+            
+            if (show) {
+                panel.style.display = 'block';
+                if (!rpmChart) {
+                    initializeRpmChart();
+                }
+                
+                // Sync the refresh enabled state with the checkbox
+                rpmRefreshEnabled = rpmRefreshCheckbox.checked;
+                
+                if (rpmRefreshEnabled) {
+                    startRpmDataFetching(true); // Clear data for new monitoring session
+                }
+            } else {
+                panel.style.display = 'none';
+                stopRpmDataFetching();
+            }
+        }
+        
+        function startRpmDataFetching(clearData = false) {
+            if (rpmChartUpdateInterval) return;
+
+            // Clear previous data only when explicitly requested (new monitoring session)
+            if (clearData) {
+                rpmData.length = 0;
+                timeLabels.length = 0;
+                rpmStartTime = Date.now();
+            } else if (rpmData.length === 0) {
+                // If no data exists, start fresh
+                rpmStartTime = Date.now();
+            } else {
+                // If data exists and we're resuming, adjust start time to continue timeline
+                const lastTimeLabel = parseFloat(timeLabels[timeLabels.length - 1]);
+                rpmStartTime = Date.now() - (lastTimeLabel * 1000);
+            }
+
+            fetchRpmData(); // Initial fetch
+            rpmChartUpdateInterval = setInterval(fetchRpmData, rpmUpdateFrequency); // Use variable update frequency
+        }
+
+        function stopRpmDataFetching() {
+            if (rpmChartUpdateInterval) {
+                clearInterval(rpmChartUpdateInterval);
+                rpmChartUpdateInterval = null;
+            }
+            // Ensure the flag is properly set to false
+            rpmRefreshEnabled = false;
+        }
+        
+        async function fetchRpmData() {
+            // Early return if refresh is disabled
+            if (!rpmRefreshEnabled) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/rpm?t=' + Date.now(), {
+                    cache: 'no-cache'
+                });
+                if (!response.ok) throw new Error('Network response was not ok');
+                
+                const data = await response.json();
+                
+                // Double-check that refresh is still enabled before updating
+                if (!rpmRefreshEnabled) {
+                    return;
+                }
+                
+                // Add to chart data
+                const elapsedMs = Date.now() - rpmStartTime;
+                const elapsedSeconds = (elapsedMs / 1000).toFixed(3);
+                
+                rpmData.push(data.rpm);
+                timeLabels.push(elapsedSeconds);
+                
+                // Keep only last N data points
+                if (rpmData.length > maxRpmDataPoints) {
+                    rpmData.shift();
+                    timeLabels.shift();
+                }
+                
+                // Update Y-axis scaling if auto scale is enabled
+                if (rpmAutoScaleEnabled && rpmData.length > 0) {
+                    const maxRpm = Math.max(...rpmData);
+                    const minRpm = Math.min(...rpmData);
+                    
+                    if (minRpm === maxRpm) {
+                        // All values are the same, set a reasonable range
+                        rpmChart.options.scales.y.min = Math.max(0, minRpm - 100);
+                        rpmChart.options.scales.y.max = maxRpm + 100;
+                    } else if (minRpm >= 0 && maxRpm <= 1000) {
+                        // Low RPM range, start from zero
+                        rpmChart.options.scales.y.beginAtZero = true;
+                        rpmChart.options.scales.y.min = 0;
+                        rpmChart.options.scales.y.max = undefined;
+                    } else {
+                        // Higher RPM range, optimize for data
+                        rpmChart.options.scales.y.beginAtZero = false;
+                        const range = maxRpm - minRpm;
+                        const padding = range * 0.1;
+                        rpmChart.options.scales.y.min = Math.max(0, minRpm - padding);
+                        rpmChart.options.scales.y.max = undefined;
+                    }
+                } else {
+                    // Fixed scale mode
+                    rpmChart.options.scales.y.beginAtZero = true;
+                    rpmChart.options.scales.y.min = 0;
+                    rpmChart.options.scales.y.max = undefined;
+                }
+                
+                // Update chart data - double check refresh is still enabled
+                if (rpmChart && rpmRefreshEnabled) {
+                    rpmChart.data.labels = [...timeLabels];
+                    rpmChart.data.datasets[0].data = [...rpmData];
+                    rpmChart.update('none');
+                }
+                
+            } catch (error) {
+                console.error('Error fetching RPM data:', error);
+            }
+        }
+        
+        // Reset RPM data and chart
+        function resetRpmData() {
+            // Clear the data arrays
+            rpmData.length = 0;
+            timeLabels.length = 0;
+            
+            // Reset the start time
+            rpmStartTime = Date.now();
+            
+            // Update the chart immediately if it exists
+            if (rpmChart) {
+                rpmChart.data.labels = [];
+                rpmChart.data.datasets[0].data = [];
+                
+                // Reset scale options to defaults
+                rpmChart.options.scales.y.beginAtZero = true;
+                rpmChart.options.scales.y.min = 0;
+                rpmChart.options.scales.y.max = undefined;
+                
+                rpmChart.update();
+            }
+            
+            // Show confirmation toast
+            showToast('RPM data reset successfully', 'success');
+        }
+        
+        // Update max frequency limit
+        async function updateMaxFrequencyLimit() {
+            const maxFreq = parseInt(elements.maxFreqSelect.value);
+            elements.freqSlider.max = maxFreq;
+            elements.freqInput.max = maxFreq;
+            
+            // Adjust current frequency if it exceeds the new limit
+            if (parseInt(elements.freqInput.value) > maxFreq) {
+                elements.freqSlider.value = maxFreq;
+                elements.freqInput.value = maxFreq;
+                updatePWM();
+            }
+            
+            // Send max frequency to backend
+            try {
+                const response = await fetch('/api/max-frequency', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `maxFrequency=${maxFreq}`
+                });
+                
+                const data = await response.json();
+                
+                if (data.success === true) {
+                    console.log('Max frequency updated:', maxFreq);
+                } else {
+                    console.error('Failed to update max frequency:', data.message);
+                    showToast('Error updating max frequency: ' + data.message, 'error');
+                }
+            } catch (error) {
+                console.error('Error updating max frequency:', error);
+                showToast('Connection error while updating max frequency', 'error');
+            }
+        }
+        
+        // Update pole pairs
+        async function updatePolePairs() {
+            const polePairs = parseInt(elements.polePairsSelect.value);
+            
+            try {
+                const response = await fetch('/api/pole-pairs', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `polePairs=${polePairs}`
+                });
+                
+                if (response.ok) {
+                    console.log(`Pole pairs updated to: ${polePairs}`);
+                }
+            } catch (error) {
+                console.error('Error updating pole pairs:', error);
+            }
+        }
+        
+        // Update PWM settings
+        async function updatePWM() {
+            const frequency = parseInt(elements.freqInput.value);
+            const duty = parseFloat(elements.dutyInput.value);
+            
+            try {
+                const formData = new FormData();
+                formData.append('frequency', frequency);
+                formData.append('duty', duty);
+                
+                const response = await fetch('/api/pwm', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success === true) {
+                    updateStatusDisplay();
+                    showToast('PWM settings updated successfully', 'success');
+                    
+                    // Save to localStorage for cross-page synchronization
+                    localStorage.setItem('currentDuty', duty.toString());
+                    localStorage.setItem('currentFrequency', frequency.toString());
+                } else {
+                    showToast('Error updating PWM settings: ' + (data.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error updating PWM:', error);
+                showToast('Connection error', 'error');
+            }
+        }
+        
+        // Update only RPM display (called frequently)
+        async function updateRPMDisplay() {
+            try {
+                const response = await fetch('/api/rpm?t=' + Date.now(), {
+                    cache: 'no-cache'
+                });
+                const data = await response.json();
+
+                // Update RPM/Real Input Frequency display based on current mode
+                if (displayMode === 'rpm') {
+                    elements.rpmValue.textContent = data.rpm.toFixed(1);
+                } else {
+                    const realInputFreq = data.realInputFrequency || 0; // Use real input frequency from API
+                    elements.rpmValue.textContent = realInputFreq.toFixed(2);
+                }
+            } catch (error) {
+                console.error('Error fetching RPM:', error);
+            }
+        }
+
+        // Update RPM and status display
+        async function updateStatusDisplay() {
+            try {
+                // 添加時間戳來強制破壞快取
+                const response = await fetch('/api/status?t=' + Date.now(), {
+                    cache: 'no-cache',
+                    headers: {
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache'
+                    }
+                });
+                const data = await response.json();
+
+                // Update RPM/Real Input Frequency display based on current mode
+                if (displayMode === 'rpm') {
+                    elements.rpmValue.textContent = data.rpm.toFixed(1);
+                } else {
+                    const realInputFreq = data.realInputFrequency || 0; // Use real input frequency from API
+                    elements.rpmValue.textContent = realInputFreq.toFixed(2);
+                }
+
+                // Update status panel
+                elements.statusFreq.textContent = `${data.frequency} Hz`;
+                elements.statusDuty.textContent = `${data.duty.toFixed(1)}%`;
+                elements.statusPoles.textContent = data.polePairs;
+                elements.statusUptime.textContent = data.uptime;
+                elements.statusHeap.textContent = `${Math.round(data.freeHeap / 1024)} KB`;
+                
+                // Update WiFi status
+                if (data.wifiConnected) {
+                    elements.wifiStatus.className = 'connection-status connected';
+                    elements.wifiStatusHeader.className = 'connection-status connected';
+                    
+                    // Display IP address
+                    const ipAddress = data.wifiIP || 'Connected';
+                    elements.wifiIpHeader.textContent = ipAddress;
+                } else {
+                    elements.wifiStatus.className = 'connection-status disconnected';
+                    elements.wifiStatusHeader.className = 'connection-status disconnected';
+                    
+                    // Show not connected
+                    elements.wifiIpHeader.textContent = t('not-connected');
+                }
+                
+                // Update BLE status
+                if (data.bleConnected) {
+                    elements.bleStatus.className = 'connection-status connected';
+                } else {
+                    elements.bleStatus.className = 'connection-status disconnected';
+                }
+                
+                // Update BLE device name
+                if (data.bleDeviceName) {
+                    elements.bleDeviceName.textContent = data.bleDeviceName;
+                } else {
+                    elements.bleDeviceName.textContent = '---';
+                }
+                
+                // Update page title and subtitle
+                elements.pageTitle.textContent = data.title || 'ESP32 Motor Control';
+                elements.pageSubtitle.textContent = data.subtitle || 'PWM & RPM Monitor';
+
+                // Update firmware version
+                elements.statusVersion.textContent = data.firmwareVersion || '---';
+
+            } catch (error) {
+                console.error('Error fetching status:', error);
+            }
+        }
+        
+        // Update step sizes on the backend
+        async function updateStepSizes() {
+            try {
+                const config = {
+                    dutyStepSize: parseFloat(elements.dutyStepSelect.value),
+                    freqStepSize: parseInt(elements.freqStepSelect.value)
+                };
+
+                await fetch('/api/config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(config)
+                });
+            } catch (error) {
+                console.error('Error updating step sizes:', error);
+            }
+        }
+
+        // Save settings to EEPROM
+        async function saveSettings() {
+            try {
+                const response = await fetch('/api/save', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success === true) {
+                    showToast(t('settings-saved'), 'success');
+                } else {
+                    showToast(t('error-saving'), 'error');
+                }
+            } catch (error) {
+                console.error('Error saving settings:', error);
+                showToast(t('connection-error'), 'error');
+            }
+        }
+        
+        // Load settings from EEPROM
+        async function loadSettings() {
+            try {
+                const response = await fetch('/api/load', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success === true) {
+                    // Update controls with loaded values
+                    elements.freqSlider.value = data.frequency;
+                    elements.freqInput.value = data.frequency;
+                    elements.dutySlider.value = data.duty;
+                    elements.dutyInput.value = data.duty;
+                    elements.maxFreqSelect.value = data.maxFrequency;
+                    elements.polePairsSelect.value = data.polePairs;
+                    
+                    // Save to localStorage for cross-page synchronization
+                    localStorage.setItem('currentDuty', data.duty.toString());
+                    
+                    // Update step sizes if available
+                    if (data.dutyStepSize !== undefined) {
+                        elements.dutyStepSelect.value = data.dutyStepSize;
+                        elements.dutySlider.step = data.dutyStepSize;
+                        elements.dutyInput.step = data.dutyStepSize;
+                    }
+                    if (data.freqStepSize !== undefined) {
+                        elements.freqStepSelect.value = data.freqStepSize;
+                        elements.freqSlider.step = data.freqStepSize;
+                        elements.freqInput.step = data.freqStepSize;
+                    }
+                    
+                    updateMaxFrequencyLimit();
+                    showToast('Settings loaded successfully', 'success');
+                } else {
+                    showToast('Error loading settings', 'error');
+                }
+            } catch (error) {
+                console.error('Error loading settings:', error);
+                showToast('Connection error', 'error');
+            }
+        }
+        
+        // Show toast notification
+        function showToast(message, type = 'success') {
+            elements.toast.textContent = message;
+            elements.toast.className = `toast ${type} show`;
+            
+            setTimeout(() => {
+                elements.toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // Start the update loop
+        function startUpdateLoop() {
+            // Initial updates
+            updateStatusDisplay();
+            updateRPMDisplay();
+
+            // Status updates every 2 seconds (reduced from 1s to avoid ESP32 overload)
+            updateInterval = setInterval(updateStatusDisplay, 2000);
+
+            // RPM display updates every 1000ms (reduced from 200ms to avoid ESP32 overload)
+            rpmDisplayUpdateInterval = setInterval(updateRPMDisplay, 1000);
+        }
+        
+        // Initialize when page loads
+        console.log('[DEBUG] JavaScript v2.1 loaded - Adjustable RPM chart update rate');
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('[DEBUG] DOMContentLoaded event fired');
+            init();
+        });
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+            }
+            if (rpmDisplayUpdateInterval) {
+                clearInterval(rpmDisplayUpdateInterval);
+            }
+            if (rpmChartUpdateInterval) {
+                clearInterval(rpmChartUpdateInterval);
+            }
+        });
+    </script>
+    </div> <!-- Close page-wrapper -->
+</body>
+</html>

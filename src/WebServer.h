@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <ESPAsyncWebServer.h>
 #include <AsyncTCP.h>
+#include <SPIFFS.h>
 #include "WiFiSettings.h"
 #include "MotorControl.h"
 #include "MotorSettings.h"
@@ -142,6 +143,18 @@ private:
     void handleResetSettings(AsyncWebServerRequest *request);
     void handleGetWiFiStatus(AsyncWebServerRequest *request);
     void handleScanNetworks(AsyncWebServerRequest *request);
+
+    // New API handlers for clone implementation
+    void handleGetRPM(AsyncWebServerRequest *request);
+    void handleGetConfig(AsyncWebServerRequest *request);
+    void handlePostConfig(AsyncWebServerRequest *request);
+    void handlePostPWM(AsyncWebServerRequest *request);
+    void handlePostPolePairs(AsyncWebServerRequest *request);
+    void handlePostMaxFrequency(AsyncWebServerRequest *request);
+    void handleGetAPMode(AsyncWebServerRequest *request);
+    void handlePostAPMode(AsyncWebServerRequest *request);
+    void handlePostSave(AsyncWebServerRequest *request);
+    void handlePostLoad(AsyncWebServerRequest *request);
 };
 
 #endif // WEB_SERVER_H

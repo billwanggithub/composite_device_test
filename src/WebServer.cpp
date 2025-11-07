@@ -198,9 +198,22 @@ void WebServerManager::handleWebSocketMessage(void *arg, uint8_t *data, size_t l
 }
 
 void WebServerManager::setupRoutes() {
-    // Serve main page
+    // Serve main page from SPIFFS
     server->on("/", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        request->send(200, "text/html", generateIndexHTML());
+        if (SPIFFS.exists("/index.html")) {
+            request->send(SPIFFS, "/index.html", "text/html");
+        } else {
+            request->send(200, "text/html", generateIndexHTML());  // Fallback to embedded HTML
+        }
+    });
+
+    // Serve settings page from SPIFFS
+    server->on("/settings.html", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        if (SPIFFS.exists("/settings.html")) {
+            request->send(SPIFFS, "/settings.html", "text/html");
+        } else {
+            request->send(404, "text/plain", "Settings page not found");
+        }
     });
 
     // REST API endpoints
@@ -242,6 +255,72 @@ void WebServerManager::setupRoutes() {
 
     server->on("/api/wifi/scan", HTTP_GET, [this](AsyncWebServerRequest *request) {
         handleScanNetworks(request);
+    });
+
+    // New API endpoints for clone implementation
+    server->on("/api/rpm", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        handleGetRPM(request);
+    });
+
+    server->on("/api/config", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        handleGetConfig(request);
+    });
+
+    server->on("/api/config", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        handlePostConfig(request);
+    });
+
+    server->on("/api/pwm", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        handlePostPWM(request);
+    });
+
+    server->on("/api/pole-pairs", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        handlePostPolePairs(request);
+    });
+
+    server->on("/api/max-frequency", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        handlePostMaxFrequency(request);
+    });
+
+    server->on("/api/ap-mode", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        handleGetAPMode(request);
+    });
+
+    server->on("/api/ap-mode", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        handlePostAPMode(request);
+    });
+
+    server->on("/api/save", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        handlePostSave(request);
+    });
+
+    server->on("/api/load", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        handlePostLoad(request);
+    });
+
+    // Captive portal detection endpoints
+    server->on("/generate_204", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->redirect("http://192.168.4.1/");
+    });
+
+    server->on("/gen_204", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->redirect("http://192.168.4.1/");
+    });
+
+    server->on("/mobile/status.php", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->redirect("http://192.168.4.1/");
+    });
+
+    server->on("/hotspot-detect.html", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->redirect("http://192.168.4.1/");
+    });
+
+    server->on("/library/test/success.html", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->redirect("http://192.168.4.1/");
+    });
+
+    server->on("/ncsi.txt", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send(200, "text/plain", "Microsoft NCSI");
     });
 
     // 404 handler
@@ -353,19 +432,53 @@ void WebServerManager::handleScanNetworks(AsyncWebServerRequest *request) {
 }
 
 String WebServerManager::generateStatusJSON() {
-    StaticJsonDocument<512> doc;
+    StaticJsonDocument<1024> doc;
 
     if (pMotorControl) {
         doc["rpm"] = pMotorControl->getCurrentRPM();
         doc["raw_rpm"] = pMotorControl->getRawRPM();
-        doc["freq"] = pMotorControl->getPWMFrequency();
+        doc["frequency"] = pMotorControl->getPWMFrequency();
+        doc["freq"] = pMotorControl->getPWMFrequency();  // Alias for compatibility
         doc["duty"] = pMotorControl->getPWMDuty();
-        doc["input_freq"] = pMotorControl->getInputFrequency();
+        doc["realInputFrequency"] = pMotorControl->getInputFrequency();
+        doc["input_freq"] = pMotorControl->getInputFrequency();  // Alias
         doc["ramping"] = pMotorControl->isRamping();
         doc["initialized"] = pMotorControl->isInitialized();
         doc["capture_init"] = pMotorControl->isCaptureInitialized();
-        doc["uptime"] = pMotorControl->getUptime();
+
+        // Format uptime as "H:MM:SS"
+        unsigned long uptimeMs = pMotorControl->getUptime();
+        unsigned long seconds = uptimeMs / 1000;
+        unsigned long hours = seconds / 3600;
+        unsigned long minutes = (seconds % 3600) / 60;
+        unsigned long secs = seconds % 60;
+        char uptimeStr[32];
+        sprintf(uptimeStr, "%lu:%02lu:%02lu", hours, minutes, secs);
+        doc["uptime"] = String(uptimeStr);
     }
+
+    if (pMotorSettingsManager) {
+        const MotorSettings& settings = pMotorSettingsManager->get();
+        doc["polePairs"] = settings.polePairs;
+        doc["maxFrequency"] = settings.maxFrequency;
+        doc["ledBrightness"] = settings.ledBrightness;
+        doc["rpmUpdateRate"] = settings.rpmUpdateRate;
+    }
+
+    if (pWiFiManager) {
+        doc["wifiConnected"] = pWiFiManager->isConnected();
+        doc["wifiIP"] = pWiFiManager->getIPAddress();
+        doc["apModeEnabled"] = pWiFiManager->isAPMode();
+        doc["apModeActive"] = pWiFiManager->isAPMode();
+        doc["apIP"] = pWiFiManager->getAPIP();
+    }
+
+    // BLE connection status (would need to be passed from main.cpp)
+    doc["bleConnected"] = false;  // TODO: Pass BLE status from main
+
+    // System info
+    doc["freeHeap"] = ESP.getFreeHeap();
+    doc["firmwareVersion"] = "2.1.0";  // TODO: Define version constant
 
     String json;
     serializeJson(doc, json);
@@ -388,6 +501,195 @@ String WebServerManager::generateSettingsJSON() {
     String json;
     serializeJson(doc, json);
     return json;
+}
+
+// New API handler implementations for clone
+
+void WebServerManager::handleGetRPM(AsyncWebServerRequest *request) {
+    StaticJsonDocument<256> doc;
+
+    if (pMotorControl) {
+        doc["rpm"] = pMotorControl->getCurrentRPM();
+        doc["realInputFrequency"] = pMotorControl->getInputFrequency();
+        doc["polePairs"] = pMotorSettingsManager->get().polePairs;
+        doc["frequency"] = pMotorControl->getPWMFrequency();
+        doc["duty"] = pMotorControl->getPWMDuty();
+    }
+
+    String json;
+    serializeJson(doc, json);
+    request->send(200, "application/json", json);
+}
+
+void WebServerManager::handleGetConfig(AsyncWebServerRequest *request) {
+    StaticJsonDocument<512> doc;
+
+    if (pMotorSettingsManager) {
+        const MotorSettings& settings = pMotorSettingsManager->get();
+        doc["title"] = "ESP32-S3 Motor Control";
+        doc["subtitle"] = "PWM & RPM Monitoring";
+        doc["language"] = "en";  // Default to English
+        doc["chartUpdateRate"] = settings.rpmUpdateRate;
+        doc["ledBrightness"] = settings.ledBrightness;
+        doc["polePairs"] = settings.polePairs;
+        doc["maxFrequency"] = settings.maxFrequency;
+        doc["frequency"] = settings.frequency;
+        doc["duty"] = settings.duty;
+        doc["apModeEnabled"] = pWiFiManager ? pWiFiManager->isAPMode() : false;
+    }
+
+    String json;
+    serializeJson(doc, json);
+    request->send(200, "application/json", json);
+}
+
+void WebServerManager::handlePostConfig(AsyncWebServerRequest *request) {
+    // Handle POST parameters
+    bool updated = false;
+
+    if (request->hasParam("ledBrightness", true)) {
+        uint8_t brightness = request->getParam("ledBrightness", true)->value().toInt();
+        pMotorSettingsManager->get().ledBrightness = brightness;
+        updated = true;
+    }
+
+    if (request->hasParam("chartUpdateRate", true)) {
+        uint32_t rate = request->getParam("chartUpdateRate", true)->value().toInt();
+        pMotorSettingsManager->get().rpmUpdateRate = rate;
+        updated = true;
+    }
+
+    if (updated) {
+        request->send(200, "application/json", "{\"success\":true,\"message\":\"Configuration updated\"}");
+    } else {
+        request->send(400, "application/json", "{\"success\":false,\"error\":\"No valid parameters\"}");
+    }
+}
+
+void WebServerManager::handlePostPWM(AsyncWebServerRequest *request) {
+    bool hasFreq = request->hasParam("frequency", true);
+    bool hasDuty = request->hasParam("duty", true);
+
+    if (!hasFreq && !hasDuty) {
+        request->send(400, "application/json", "{\"success\":false,\"error\":\"Missing frequency or duty parameter\"}");
+        return;
+    }
+
+    bool success = true;
+    String message = "";
+
+    if (hasFreq) {
+        uint32_t freq = request->getParam("frequency", true)->value().toInt();
+        if (pMotorControl->setPWMFrequency(freq)) {
+            message += "Frequency: " + String(freq) + "Hz ";
+        } else {
+            success = false;
+        }
+    }
+
+    if (hasDuty) {
+        float duty = request->getParam("duty", true)->value().toFloat();
+        if (pMotorControl->setPWMDuty(duty)) {
+            message += "Duty: " + String(duty, 1) + "%";
+        } else {
+            success = false;
+        }
+    }
+
+    if (success) {
+        request->send(200, "application/json", "{\"success\":true,\"message\":\"" + message + "\"}");
+    } else {
+        request->send(500, "application/json", "{\"success\":false,\"error\":\"Failed to set PWM parameters\"}");
+    }
+}
+
+void WebServerManager::handlePostPolePairs(AsyncWebServerRequest *request) {
+    if (!request->hasParam("polePairs", true)) {
+        request->send(400, "application/json", "{\"success\":false,\"error\":\"Missing polePairs parameter\"}");
+        return;
+    }
+
+    uint8_t polePairs = request->getParam("polePairs", true)->value().toInt();
+
+    if (polePairs < 1 || polePairs > 12) {
+        request->send(400, "application/json", "{\"success\":false,\"error\":\"Pole pairs must be between 1 and 12\"}");
+        return;
+    }
+
+    pMotorSettingsManager->get().polePairs = polePairs;
+    pMotorControl->setPolePairs(polePairs);
+
+    request->send(200, "application/json", "{\"success\":true,\"polePairs\":" + String(polePairs) + "}");
+}
+
+void WebServerManager::handlePostMaxFrequency(AsyncWebServerRequest *request) {
+    if (!request->hasParam("maxFrequency", true)) {
+        request->send(400, "application/json", "{\"success\":false,\"error\":\"Missing maxFrequency parameter\"}");
+        return;
+    }
+
+    uint32_t maxFreq = request->getParam("maxFrequency", true)->value().toInt();
+
+    if (maxFreq < 10 || maxFreq > 500000) {
+        request->send(400, "application/json", "{\"success\":false,\"error\":\"Max frequency must be between 10 and 500000 Hz\"}");
+        return;
+    }
+
+    pMotorSettingsManager->get().maxFrequency = maxFreq;
+
+    request->send(200, "application/json", "{\"success\":true,\"maxFrequency\":" + String(maxFreq) + "}");
+}
+
+void WebServerManager::handleGetAPMode(AsyncWebServerRequest *request) {
+    StaticJsonDocument<256> doc;
+
+    if (pWiFiManager) {
+        doc["enabled"] = pWiFiManager->isAPMode();
+        doc["active"] = pWiFiManager->isAPMode();
+        doc["ip"] = pWiFiManager->getAPIP();
+        doc["ssid"] = "ESP32_Motor_Control";  // Default SSID
+    }
+
+    String json;
+    serializeJson(doc, json);
+    request->send(200, "application/json", json);
+}
+
+void WebServerManager::handlePostAPMode(AsyncWebServerRequest *request) {
+    if (!request->hasParam("enabled", true)) {
+        request->send(400, "application/json", "{\"success\":false,\"error\":\"Missing enabled parameter\"}");
+        return;
+    }
+
+    String enabledStr = request->getParam("enabled", true)->value();
+    bool enabled = (enabledStr == "true" || enabledStr == "1");
+
+    // TODO: Implement AP mode control in WiFiManager
+    // For now, just acknowledge the request
+
+    request->send(200, "application/json", "{\"success\":true,\"enabled\":" + String(enabled ? "true" : "false") + "}");
+}
+
+void WebServerManager::handlePostSave(AsyncWebServerRequest *request) {
+    if (pMotorSettingsManager && pMotorSettingsManager->save()) {
+        request->send(200, "application/json", "{\"success\":true,\"message\":\"Settings saved to EEPROM\"}");
+    } else {
+        request->send(500, "application/json", "{\"success\":false,\"error\":\"Failed to save settings\"}");
+    }
+}
+
+void WebServerManager::handlePostLoad(AsyncWebServerRequest *request) {
+    if (pMotorSettingsManager && pMotorSettingsManager->load()) {
+        // Apply loaded settings to motor control
+        const MotorSettings& settings = pMotorSettingsManager->get();
+        pMotorControl->setPWMFrequency(settings.frequency);
+        pMotorControl->setPWMDuty(settings.duty);
+        pMotorControl->setPolePairs(settings.polePairs);
+
+        request->send(200, "application/json", "{\"success\":true,\"message\":\"Settings loaded from EEPROM\"}");
+    } else {
+        request->send(500, "application/json", "{\"success\":false,\"error\":\"Failed to load settings\"}");
+    }
 }
 
 String WebServerManager::generateIndexHTML() {

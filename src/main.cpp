@@ -18,6 +18,7 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include <SPIFFS.h>
 
 // USB CDC 實例（用於 console）
 USBCDC USBSerial;
@@ -516,6 +517,33 @@ void setup() {
     USBSerial.printf("  極對數: %d\n", motorSettingsManager.get().polePairs);
     USBSerial.println("");
     USBSerial.println("輸入 'HELP' 查看所有命令");
+    USBSerial.println("=================================");
+
+    // ========== 步驟 5.5: 初始化 SPIFFS 檔案系統 ==========
+    USBSerial.println("");
+    USBSerial.println("=== 初始化 SPIFFS 檔案系統 ===");
+
+    if (!SPIFFS.begin(true)) {  // true = format if mount fails
+        USBSerial.println("❌ SPIFFS mount failed!");
+        USBSerial.println("  Web 介面將使用內建 HTML（備用模式）");
+    } else {
+        USBSerial.println("✅ SPIFFS mounted successfully");
+
+        // List files in SPIFFS for debugging
+        File root = SPIFFS.open("/");
+        File file = root.openNextFile();
+        if (file) {
+            USBSerial.println("📁 SPIFFS files:");
+            while (file) {
+                USBSerial.printf("  - %s (%d bytes)\n", file.name(), file.size());
+                file = root.openNextFile();
+            }
+        } else {
+            USBSerial.println("  ⚠️ No files found in SPIFFS");
+            USBSerial.println("  請使用 'pio run --target uploadfs' 上傳檔案");
+        }
+    }
+
     USBSerial.println("=================================");
 
     // ========== 步驟 6: 初始化 WiFi 和 Web 伺服器 ==========
