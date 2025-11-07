@@ -1,5 +1,6 @@
 #include "WebServer.h"
 #include "ArduinoJson.h"
+#include <WiFi.h>
 
 WebServerManager::WebServerManager() {
     // Constructor
@@ -465,12 +466,21 @@ String WebServerManager::generateStatusJSON() {
         doc["rpmUpdateRate"] = settings.rpmUpdateRate;
     }
 
-    if (pWiFiManager) {
+    if (pWiFiManager && pWiFiSettings) {
         doc["wifiConnected"] = pWiFiManager->isConnected();
         doc["wifiIP"] = pWiFiManager->getIPAddress();
-        doc["apModeEnabled"] = pWiFiManager->isAPMode();
-        doc["apModeActive"] = pWiFiManager->isAPMode();
-        doc["apIP"] = pWiFiManager->getAPIP();
+
+        // Check if AP mode is enabled
+        bool apMode = (pWiFiSettings->mode == WiFiMode::AP || pWiFiSettings->mode == WiFiMode::AP_STA);
+        doc["apModeEnabled"] = apMode;
+        doc["apModeActive"] = apMode && (pWiFiManager->getStatus() == WiFiStatus::AP_STARTED);
+
+        // Get AP IP from WiFi library directly
+        if (apMode) {
+            doc["apIP"] = WiFi.softAPIP().toString();
+        } else {
+            doc["apIP"] = "";
+        }
     }
 
     // BLE connection status (would need to be passed from main.cpp)
@@ -535,7 +545,14 @@ void WebServerManager::handleGetConfig(AsyncWebServerRequest *request) {
         doc["maxFrequency"] = settings.maxFrequency;
         doc["frequency"] = settings.frequency;
         doc["duty"] = settings.duty;
-        doc["apModeEnabled"] = pWiFiManager ? pWiFiManager->isAPMode() : false;
+
+        // Check if AP mode is enabled
+        if (pWiFiSettings) {
+            bool apMode = (pWiFiSettings->mode == WiFiMode::AP || pWiFiSettings->mode == WiFiMode::AP_STA);
+            doc["apModeEnabled"] = apMode;
+        } else {
+            doc["apModeEnabled"] = false;
+        }
     }
 
     String json;
@@ -616,8 +633,9 @@ void WebServerManager::handlePostPolePairs(AsyncWebServerRequest *request) {
         return;
     }
 
+    // Update pole pairs in settings
+    // Note: MotorControl reads polePairs from settings when calculating RPM
     pMotorSettingsManager->get().polePairs = polePairs;
-    pMotorControl->setPolePairs(polePairs);
 
     request->send(200, "application/json", "{\"success\":true,\"polePairs\":" + String(polePairs) + "}");
 }
@@ -643,11 +661,20 @@ void WebServerManager::handlePostMaxFrequency(AsyncWebServerRequest *request) {
 void WebServerManager::handleGetAPMode(AsyncWebServerRequest *request) {
     StaticJsonDocument<256> doc;
 
-    if (pWiFiManager) {
-        doc["enabled"] = pWiFiManager->isAPMode();
-        doc["active"] = pWiFiManager->isAPMode();
-        doc["ip"] = pWiFiManager->getAPIP();
-        doc["ssid"] = "ESP32_Motor_Control";  // Default SSID
+    if (pWiFiSettings && pWiFiManager) {
+        // Check if AP mode is enabled in settings
+        bool apMode = (pWiFiSettings->mode == WiFiMode::AP || pWiFiSettings->mode == WiFiMode::AP_STA);
+        doc["enabled"] = apMode;
+        doc["active"] = apMode && (pWiFiManager->getStatus() == WiFiStatus::AP_STARTED);
+
+        // Get AP IP and SSID
+        if (apMode) {
+            doc["ip"] = WiFi.softAPIP().toString();
+            doc["ssid"] = String(pWiFiSettings->ap_ssid);
+        } else {
+            doc["ip"] = "";
+            doc["ssid"] = "";
+        }
     }
 
     String json;
@@ -684,7 +711,7 @@ void WebServerManager::handlePostLoad(AsyncWebServerRequest *request) {
         const MotorSettings& settings = pMotorSettingsManager->get();
         pMotorControl->setPWMFrequency(settings.frequency);
         pMotorControl->setPWMDuty(settings.duty);
-        pMotorControl->setPolePairs(settings.polePairs);
+        // Note: polePairs are read from settings by MotorControl when calculating RPM
 
         request->send(200, "application/json", "{\"success\":true,\"message\":\"Settings loaded from EEPROM\"}");
     } else {
