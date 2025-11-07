@@ -236,7 +236,26 @@
             position: relative;
             z-index: 1;
         }
-        
+
+        .max-safe-rpm-display {
+            text-align: center;
+            margin: 15px 0 5px 0;
+            padding: 8px 15px;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(245, 87, 108, 0.2);
+            font-size: 1.1em;
+            font-weight: 500;
+            color: white;
+        }
+
+        .max-safe-rpm-value {
+            font-weight: 700;
+            font-size: 1.2em;
+            color: #fff;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.3);
+        }
+
         .control-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -671,7 +690,14 @@
                 <option value="12">12</option>
             </select>
         </div>
-        
+
+        <!-- Max Safe RPM Display -->
+        <div class="max-safe-rpm-display">
+            <span class="lang-zh-CN">最大安全轉速：</span>
+            <span class="lang-en">Max Safe RPM: </span>
+            <span id="maxSafeRPMValue" class="max-safe-rpm-value">---</span>
+        </div>
+
         <!-- RPM Display with embedded Toggle -->
         <div class="rpm-display" style="position: relative;">
             <div class="rpm-value" id="rpmValue">0.0</div>
@@ -876,6 +902,7 @@
         const elements = {
             rpmValue: document.getElementById('rpmValue'),
             rpmLabel: document.getElementById('rpmLabel'),
+            maxSafeRPMValue: document.getElementById('maxSafeRPMValue'),
             polePairsSelect: document.getElementById('polePairsSelect'),
             freqSlider: document.getElementById('freqSlider'),
             freqInput: document.getElementById('freqInput'),
@@ -1310,11 +1337,17 @@
                 debouncedUpdate();
             });
             
+            // Frequency input: update slider display but only apply on Enter
             elements.freqInput.addEventListener('input', () => {
                 elements.freqSlider.value = elements.freqInput.value;
-                // Immediately update localStorage for cross-page synchronization
-                localStorage.setItem('currentFrequency', elements.freqInput.value);
-                debouncedUpdate();
+            });
+
+            elements.freqInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    // Immediately update localStorage for cross-page synchronization
+                    localStorage.setItem('currentFrequency', elements.freqInput.value);
+                    debouncedUpdate();
+                }
             });
             
             elements.freqUpBtn.addEventListener('click', () => {
@@ -1333,11 +1366,17 @@
                 debouncedUpdate();
             });
             
+            // Duty input: update slider display but only apply on Enter
             elements.dutyInput.addEventListener('input', () => {
                 elements.dutySlider.value = elements.dutyInput.value;
-                // Immediately update localStorage for cross-page synchronization
-                localStorage.setItem('currentDuty', elements.dutyInput.value);
-                debouncedUpdate();
+            });
+
+            elements.dutyInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    // Immediately update localStorage for cross-page synchronization
+                    localStorage.setItem('currentDuty', elements.dutyInput.value);
+                    debouncedUpdate();
+                }
             });
             
             elements.dutyUpBtn.addEventListener('click', () => {
@@ -1816,6 +1855,11 @@
                 } else {
                     const realInputFreq = data.realInputFrequency || 0; // Use real input frequency from API
                     elements.rpmValue.textContent = realInputFreq.toFixed(2);
+                }
+
+                // Update max safe RPM display
+                if (data.maxSafeRPM !== undefined) {
+                    elements.maxSafeRPMValue.textContent = data.maxSafeRPM.toLocaleString();
                 }
 
                 // Update status panel

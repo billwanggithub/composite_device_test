@@ -15,6 +15,7 @@ struct MotorSettings {
     uint8_t polePairs = 2;             // Motor pole pairs (1-12)
     uint32_t maxFrequency = 500000;    // Maximum frequency limit (MCPWM driver limit: 500 kHz)
     uint32_t maxSafeRPM = 500000;      // Overspeed protection threshold
+    bool maxSafeRPMEnabled = false;    // Enable/disable overspeed protection (default: disabled)
     uint8_t ledBrightness = 25;        // RGB LED brightness (0-255)
     uint32_t rpmUpdateRate = 100;      // RPM update interval in ms (20-1000)
     char language[10] = "en";          // UI language (en, zh-CN, zh-TW)
@@ -88,6 +89,7 @@ private:
     static const char* KEY_POLE_PAIRS;
     static const char* KEY_MAX_FREQUENCY;
     static const char* KEY_MAX_SAFE_RPM;
+    static const char* KEY_MAX_SAFE_RPM_EN;
     static const char* KEY_LED_BRIGHTNESS;
     static const char* KEY_RPM_UPDATE_RATE;
     static const char* KEY_LANGUAGE;
@@ -100,6 +102,7 @@ namespace MotorDefaults {
     constexpr uint8_t POLE_PAIRS = 2;
     constexpr uint32_t MAX_FREQUENCY = 500000;  // 500 kHz - MCPWM driver limit
     constexpr uint32_t MAX_SAFE_RPM = 500000;
+    constexpr bool MAX_SAFE_RPM_ENABLED = false;  // Disabled by default
     constexpr uint8_t LED_BRIGHTNESS = 25;
     constexpr uint32_t RPM_UPDATE_RATE = 100;
 }

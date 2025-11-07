@@ -7,6 +7,7 @@ const char* MotorSettingsManager::KEY_DUTY = "duty";
 const char* MotorSettingsManager::KEY_POLE_PAIRS = "polePairs";
 const char* MotorSettingsManager::KEY_MAX_FREQUENCY = "maxFreq";
 const char* MotorSettingsManager::KEY_MAX_SAFE_RPM = "maxRPM";
+const char* MotorSettingsManager::KEY_MAX_SAFE_RPM_EN = "maxRPMEn";
 const char* MotorSettingsManager::KEY_LED_BRIGHTNESS = "ledBright";
 const char* MotorSettingsManager::KEY_RPM_UPDATE_RATE = "rpmRate";
 const char* MotorSettingsManager::KEY_LANGUAGE = "language";
@@ -36,6 +37,7 @@ bool MotorSettingsManager::load() {
     settings.polePairs = preferences.getUChar(KEY_POLE_PAIRS, MotorDefaults::POLE_PAIRS);
     settings.maxFrequency = preferences.getUInt(KEY_MAX_FREQUENCY, MotorDefaults::MAX_FREQUENCY);
     settings.maxSafeRPM = preferences.getUInt(KEY_MAX_SAFE_RPM, MotorDefaults::MAX_SAFE_RPM);
+    settings.maxSafeRPMEnabled = preferences.getBool(KEY_MAX_SAFE_RPM_EN, MotorDefaults::MAX_SAFE_RPM_ENABLED);
     settings.ledBrightness = preferences.getUChar(KEY_LED_BRIGHTNESS, MotorDefaults::LED_BRIGHTNESS);
     settings.rpmUpdateRate = preferences.getUInt(KEY_RPM_UPDATE_RATE, MotorDefaults::RPM_UPDATE_RATE);
 
@@ -84,6 +86,7 @@ bool MotorSettingsManager::save() {
     preferences.putUChar(KEY_POLE_PAIRS, settings.polePairs);
     preferences.putUInt(KEY_MAX_FREQUENCY, settings.maxFrequency);
     preferences.putUInt(KEY_MAX_SAFE_RPM, settings.maxSafeRPM);
+    preferences.putBool(KEY_MAX_SAFE_RPM_EN, settings.maxSafeRPMEnabled);
     preferences.putUChar(KEY_LED_BRIGHTNESS, settings.ledBrightness);
     preferences.putUInt(KEY_RPM_UPDATE_RATE, settings.rpmUpdateRate);
     preferences.putString(KEY_LANGUAGE, settings.language);
@@ -98,6 +101,7 @@ void MotorSettingsManager::reset() {
     settings.polePairs = MotorDefaults::POLE_PAIRS;
     settings.maxFrequency = MotorDefaults::MAX_FREQUENCY;
     settings.maxSafeRPM = MotorDefaults::MAX_SAFE_RPM;
+    settings.maxSafeRPMEnabled = MotorDefaults::MAX_SAFE_RPM_ENABLED;
     settings.ledBrightness = MotorDefaults::LED_BRIGHTNESS;
     settings.rpmUpdateRate = MotorDefaults::RPM_UPDATE_RATE;
     strncpy(settings.language, "en", sizeof(settings.language) - 1);

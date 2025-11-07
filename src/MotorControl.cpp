@@ -385,8 +385,8 @@ bool MotorControl::checkSafety() {
         return false;
     }
 
-    // Check for overspeed
-    if (currentRPM > pSettings->maxSafeRPM && currentRPM > 0) {
+    // Check for overspeed (only if protection is enabled)
+    if (pSettings->maxSafeRPMEnabled && currentRPM > pSettings->maxSafeRPM && currentRPM > 0) {
         Serial.printf("⚠️ OVERSPEED DETECTED: %.0f RPM (max: %d RPM)\n",
                      currentRPM, pSettings->maxSafeRPM);
         return false;
