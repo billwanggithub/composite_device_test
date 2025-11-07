@@ -351,28 +351,11 @@ bool PeripheralManager::applySettings() {
 
     Serial.println("[PeripheralManager] Applying settings to peripherals...");
 
-    // Apply UART1 settings
-    switch (settings.uart1Mode) {
-        case 0:  // Disabled
-            uart1.disable();
-            Serial.println("[PeripheralManager] UART1: Disabled");
-            break;
-        case 1:  // UART mode
-            if (uart1.setModeUART(settings.uart1Baud)) {
-                Serial.printf("[PeripheralManager] UART1: UART mode, %u baud\n", settings.uart1Baud);
-            }
-            break;
-        case 2:  // PWM/RPM mode
-            if (uart1.setModePWM_RPM()) {
-                uart1.setPWMFrequency(settings.uart1PwmFreq);
-                uart1.setPWMDuty(settings.uart1PwmDuty);
-                uart1.setPWMEnabled(settings.uart1PwmEnabled);
-                Serial.printf("[PeripheralManager] UART1: PWM mode, %u Hz, %.1f%%, %s\n",
-                    settings.uart1PwmFreq, settings.uart1PwmDuty,
-                    settings.uart1PwmEnabled ? "enabled" : "disabled");
-            }
-            break;
-    }
+    // UART1 mode is NOT applied from NVS settings
+    // It always defaults to PWM/RPM mode at startup (set in main.cpp)
+    // and can only be changed via commands (UART1 MODE <UART|PWM|OFF>)
+    // This ensures UART1 always starts in PWM/RPM mode regardless of saved settings
+    Serial.println("[PeripheralManager] UART1: Mode not applied (uses startup default PWM/RPM)");
 
     // Apply Buzzer settings
     buzzer.setFrequency(settings.buzzerFreq);

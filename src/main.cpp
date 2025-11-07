@@ -536,6 +536,15 @@ void setup() {
         } else {
             USBSerial.println("❌ Peripheral settings manager initialization failed");
         }
+
+        // Force UART1 to PWM/RPM mode at startup (non-persistent default)
+        USBSerial.println("");
+        USBSerial.println("🔧 Setting UART1 to default PWM/RPM mode...");
+        if (peripheralManager.getUART1().setModePWM_RPM()) {
+            USBSerial.println("✅ UART1 set to PWM/RPM mode (default)");
+        } else {
+            USBSerial.println("⚠️ Failed to set UART1 to PWM/RPM mode");
+        }
     }
 
     // ========== 步驟 2: 創建 FreeRTOS 資源（必須在 BLE 初始化之前！）==========
