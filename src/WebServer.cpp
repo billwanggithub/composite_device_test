@@ -235,6 +235,15 @@ void WebServerManager::setupRoutes() {
         }
     });
 
+    // Serve peripherals page from SPIFFS
+    server->on("/peripherals.html", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        if (SPIFFS.exists("/peripherals.html")) {
+            request->send(SPIFFS, "/peripherals.html", "text/html");
+        } else {
+            request->send(404, "text/plain", "Peripherals page not found");
+        }
+    });
+
     // REST API endpoints
     server->on("/api/status", HTTP_GET, [this](AsyncWebServerRequest *request) {
         handleGetStatus(request);
