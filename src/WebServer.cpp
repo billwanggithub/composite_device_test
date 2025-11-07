@@ -113,6 +113,7 @@ void WebServerManager::broadcastStatus() {
     doc["duty"] = pMotorControl->getPWMDuty();
     doc["ramping"] = pMotorControl->isRamping();
     doc["uptime"] = pMotorControl->getUptime();
+    doc["emergencyStop"] = pMotorControl->isEmergencyStopActive();  // Add emergency stop status
 
     String json;
     serializeJson(doc, json);
@@ -190,6 +191,10 @@ void WebServerManager::handleWebSocketMessage(void *arg, uint8_t *data, size_t l
         }
         else if (strcmp(cmd, "stop") == 0) {
             pMotorControl->emergencyStop();
+            broadcastStatus();
+        }
+        else if (strcmp(cmd, "clear_error") == 0) {
+            pMotorControl->clearEmergencyStop();
             broadcastStatus();
         }
         else if (strcmp(cmd, "get_status") == 0) {
@@ -934,6 +939,48 @@ String WebServerManager::generateIndexHTML() {
         }
         .status-connected { background: #27ae60; }
         .status-disconnected { background: #e74c3c; }
+        .error-banner {
+            background: rgba(231, 76, 60, 0.15);
+            border: 2px solid #e74c3c;
+            border-radius: 12px;
+            padding: 15px 20px;
+            margin: 20px 0;
+            display: none;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        .error-banner.show {
+            display: block;
+        }
+        .error-banner-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .error-banner-text {
+            color: #e74c3c;
+            font-weight: bold;
+            font-size: 16px;
+            flex: 1;
+            min-width: 200px;
+        }
+        .error-banner-icon {
+            font-size: 24px;
+            margin-right: 10px;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .btn-warning {
+            background: #f39c12;
+            color: white;
+        }
+        .btn-warning:hover {
+            background: #e67e22;
+            transform: translateY(-2px);
+        }
         .footer {
             text-align: center;
             margin-top: 30px;
@@ -953,6 +1000,17 @@ String WebServerManager::generateIndexHTML() {
             <span class="status-indicator" id="wsStatus"></span>
             <span id="wsStatusText">Connecting...</span>
         </p>
+
+        <!-- Emergency Stop Error Banner -->
+        <div class="error-banner" id="errorBanner">
+            <div class="error-banner-content">
+                <div>
+                    <span class="error-banner-icon">⛔</span>
+                    <span class="error-banner-text">SAFETY ALERT: Emergency stop activated! Motor is stopped.</span>
+                </div>
+                <button class="btn-warning" onclick="clearError()">Clear Error / Resume</button>
+            </div>
+        </div>
 
         <div class="rpm-display">
             <div class="rpm-label">Current RPM</div>
@@ -1069,6 +1127,15 @@ String WebServerManager::generateIndexHTML() {
                     const seconds = Math.floor(data.uptime / 1000);
                     document.getElementById('uptime').textContent = seconds + 's';
                 }
+                // Handle emergency stop status
+                if (data.emergencyStop !== undefined) {
+                    const errorBanner = document.getElementById('errorBanner');
+                    if (data.emergencyStop) {
+                        errorBanner.classList.add('show');
+                    } else {
+                        errorBanner.classList.remove('show');
+                    }
+                }
             }
         }
 
@@ -1089,6 +1156,12 @@ String WebServerManager::generateIndexHTML() {
         function emergencyStop() {
             if (confirm('Are you sure you want to emergency stop the motor?')) {
                 ws.send(JSON.stringify({cmd: 'stop'}));
+            }
+        }
+
+        function clearError() {
+            if (confirm('Clear emergency stop and resume normal operation?')) {
+                ws.send(JSON.stringify({cmd: 'clear_error'}));
             }
         }
 
