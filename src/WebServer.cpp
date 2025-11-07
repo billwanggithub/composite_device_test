@@ -515,6 +515,7 @@ String WebServerManager::generateStatusJSON() {
         const MotorSettings& settings = pMotorSettingsManager->get();
         doc["polePairs"] = settings.polePairs;
         doc["maxFrequency"] = settings.maxFrequency;
+        doc["maxSafeRPM"] = settings.maxSafeRPM;  // Add max safe RPM for emergency stop display
         doc["ledBrightness"] = settings.ledBrightness;
         doc["rpmUpdateRate"] = settings.rpmUpdateRate;
     }

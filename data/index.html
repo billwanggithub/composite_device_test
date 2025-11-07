@@ -631,7 +631,7 @@
             <div class="error-banner-content">
                 <div>
                     <span class="error-banner-icon">⛔</span>
-                    <span class="error-banner-text" data-i18n="emergency-stop-alert">SAFETY ALERT: Emergency stop activated! Motor is stopped.</span>
+                    <span class="error-banner-text" id="errorBannerText">SAFETY ALERT: Emergency stop activated! Motor is stopped.</span>
                 </div>
                 <button class="btn-warning" onclick="clearError()" data-i18n="clear-error">Clear Error / Resume</button>
             </div>
@@ -1868,9 +1868,17 @@
 
                 // Handle emergency stop status
                 const errorBanner = document.getElementById('errorBanner');
+                const errorBannerText = document.getElementById('errorBannerText');
                 if (data.emergencyStop !== undefined) {
                     isEmergencyStopActive = data.emergencyStop;  // Update global state
                     if (data.emergencyStop) {
+                        // Update error message with RPM values
+                        const currentRPM = data.rpm ? data.rpm.toFixed(1) : '---';
+                        const maxRPM = data.maxSafeRPM || '---';
+                        const message = currentLanguage === 'zh-CN'
+                            ? `⚠️ 安全警報：緊急停止已激活！當前轉速：${currentRPM} RPM / 最大安全轉速：${maxRPM} RPM`
+                            : `⚠️ SAFETY ALERT: Emergency stop activated! Current RPM: ${currentRPM} / Max Safe RPM: ${maxRPM}`;
+                        errorBannerText.textContent = message;
                         errorBanner.classList.add('show');
                     } else {
                         errorBanner.classList.remove('show');

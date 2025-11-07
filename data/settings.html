@@ -268,6 +268,63 @@
         .status-info .info-value {
             color: #7f8c8d;
         }
+
+        /* Emergency Stop Error Banner */
+        .error-banner {
+            background: rgba(231, 76, 60, 0.15);
+            border: 2px solid #e74c3c;
+            border-radius: 12px;
+            padding: 15px 20px;
+            margin: 20px;
+            display: none;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .error-banner.show {
+            display: block;
+        }
+
+        .error-banner-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .error-banner-text {
+            color: #e74c3c;
+            font-weight: bold;
+            font-size: 16px;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .error-banner-icon {
+            font-size: 24px;
+            margin-right: 10px;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .btn-warning {
+            background: #f39c12;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .btn-warning:hover {
+            background: #e67e22;
+            transform: translateY(-2px);
+        }
     </style>
 </head>
 <body>
@@ -283,6 +340,20 @@
                     <span class="lang-zh-CN">系統設置</span>
                     <span class="lang-en">Settings</span>
                 </a>
+            </div>
+        </div>
+
+        <!-- Emergency Stop Error Banner -->
+        <div class="error-banner" id="errorBanner">
+            <div class="error-banner-content">
+                <div>
+                    <span class="error-banner-icon">⛔</span>
+                    <span class="error-banner-text" id="errorBannerText">SAFETY ALERT: Emergency stop activated!</span>
+                </div>
+                <button class="btn-warning" onclick="clearError()">
+                    <span class="lang-zh-CN">清除錯誤 / 恢復</span>
+                    <span class="lang-en">Clear Error / Resume</span>
+                </button>
             </div>
         </div>
 
@@ -775,8 +846,60 @@
                 document.getElementById('wifiIP').textContent = data.wifiIP || '-';
                 document.getElementById('uptime').textContent = data.uptime || '-';
                 document.getElementById('freeHeap').textContent = (data.freeHeap ? (data.freeHeap / 1024).toFixed(1) + ' KB' : '-');
+
+                // Handle emergency stop status
+                const errorBanner = document.getElementById('errorBanner');
+                const errorBannerText = document.getElementById('errorBannerText');
+                if (data.emergencyStop !== undefined) {
+                    if (data.emergencyStop) {
+                        // Update error message with RPM values
+                        const currentRPM = data.rpm ? data.rpm.toFixed(1) : '---';
+                        const maxRPM = data.maxSafeRPM || '---';
+                        const message = currentLanguage === 'zh-CN'
+                            ? `⚠️ 安全警報：緊急停止已激活！當前轉速：${currentRPM} RPM / 最大安全轉速：${maxRPM} RPM`
+                            : `⚠️ SAFETY ALERT: Emergency stop activated! Current RPM: ${currentRPM} / Max Safe RPM: ${maxRPM}`;
+                        errorBannerText.textContent = message;
+                        errorBanner.classList.add('show');
+                    } else {
+                        errorBanner.classList.remove('show');
+                    }
+                }
             } catch (error) {
                 console.error('Failed to update system status:', error);
+            }
+        }
+
+        // Clear emergency stop error
+        async function clearError() {
+            const confirmMessage = currentLanguage === 'zh-CN'
+                ? '清除緊急停止並恢復正常操作？'
+                : 'Clear emergency stop and resume normal operation?';
+
+            if (confirm(confirmMessage)) {
+                try {
+                    const response = await fetch('/api/motor/clear-error', {
+                        method: 'POST'
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.success) {
+                            const successMessage = currentLanguage === 'zh-CN'
+                                ? '錯誤已清除 - 系統已恢復'
+                                : 'Emergency stop cleared - System resumed';
+                            showMessage(successMessage, 'success');
+                            // Force immediate status update
+                            updateSystemStatus();
+                        } else {
+                            showMessage('Failed to clear error', 'error');
+                        }
+                    } else {
+                        showMessage('Connection error', 'error');
+                    }
+                } catch (error) {
+                    console.error('Error clearing emergency stop:', error);
+                    showMessage('Connection error', 'error');
+                }
             }
         }
 
