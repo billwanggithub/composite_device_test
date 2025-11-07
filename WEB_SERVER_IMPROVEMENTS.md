@@ -3,7 +3,7 @@
 **Date:** 2025-11-07
 **Session:** Web Server Feature Enhancements
 **Base Commit:** 62f8931 (Update repository reference)
-**Latest Commit:** aee7e24 (Update duty slider and input box when emergency stop triggers)
+**Latest Commit:** bdc4b57 (Add safety prevention for PWM changes during emergency stop)
 
 ---
 
@@ -18,6 +18,7 @@ This document describes the improvements made to the web server interface, langu
 4. **Emergency stop LED latched alarm (safety-critical)**
 5. **Web interface immediate update on emergency stop**
 6. **Animated error banner with clear button (UX enhancement)**
+7. **Safety prevention for PWM changes during emergency stop (safety-critical)**
 
 ---
 
@@ -505,6 +506,133 @@ if (data.duty !== undefined) {
 
 ---
 
+### 8. Safety Prevention for PWM Changes
+
+**Problem:** Users could attempt to change PWM settings while emergency stop is active
+**Root Cause:** No checks to prevent motor control operations during emergency stop
+**Solution:** Implemented defense-in-depth safety checks at both frontend and backend
+
+**Implementation Details:**
+
+**Safety-Critical Design:**
+When emergency stop is active, the motor is in a safety-critical state and should not accept control commands. Without prevention:
+- User could try to increase duty → Confusing (slider moves but motor stays at 0%)
+- System behavior appears broken
+- No clear feedback why controls don't work
+- Potential safety hazard if emergency stop is bypassed
+
+**Two-Layer Defense:**
+
+**1. Frontend Prevention (Immediate Feedback)**
+
+Added client-side check in `updatePWM()` function to block API calls:
+
+```javascript
+// Safety check: Prevent PWM changes during emergency stop
+if (isEmergencyStopActive) {
+    showToast(
+        currentLanguage === 'zh-CN'
+            ? '⚠️ 紧急停止激活中！请先清除错误。'
+            : '⚠️ Emergency stop is active! Please clear the error first.',
+        'error'
+    );
+    return;  // Prevent API call
+}
+```
+
+**Global State Tracking:**
+```javascript
+let isEmergencyStopActive = false;  // Track emergency stop status
+
+// Updated every 2 seconds when status is polled
+if (data.emergencyStop !== undefined) {
+    isEmergencyStopActive = data.emergencyStop;
+}
+```
+
+**2. Backend Enforcement (Safety Critical)**
+
+Added server-side checks in API handlers:
+
+```cpp
+void WebServerManager::handleSetPWMDuty(AsyncWebServerRequest *request) {
+    // Safety check: Prevent duty changes during emergency stop
+    if (pMotorControl->isEmergencyStopActive()) {
+        request->send(403, "application/json",
+            "{\"error\":\"Cannot set duty while emergency stop is active. Please clear the error first.\"}");
+        return;
+    }
+    // ... rest of handler
+}
+
+void WebServerManager::handleSetPWMFreq(AsyncWebServerRequest *request) {
+    // Safety check: Prevent frequency changes during emergency stop
+    if (pMotorControl->isEmergencyStopActive()) {
+        request->send(403, "application/json",
+            "{\"error\":\"Cannot set frequency while emergency stop is active. Please clear the error first.\"}");
+        return;
+    }
+    // ... rest of handler
+}
+```
+
+**HTTP 403 Forbidden:**
+- Standard HTTP status for "understood request but refuses to authorize it"
+- Clear semantic meaning: Operation is forbidden due to safety state
+- Distinguishes from 400 (bad request) and 500 (server error)
+
+**Coverage:**
+All PWM control methods are blocked:
+- ✅ Duty slider adjustment
+- ✅ Duty input box changes
+- ✅ Preset buttons (0%, 10%, 25%, 50%, 75%, 100%)
+- ✅ Frequency slider adjustment
+- ✅ Frequency input box changes
+- ✅ Direct API calls (defense in depth)
+
+**User Experience Flow:**
+
+1. **Emergency Stop Triggers**
+   - Error banner shows: "⛔ SAFETY ALERT: Emergency stop activated!"
+   - Duty slider resets to 0%
+   - `isEmergencyStopActive = true`
+
+2. **User Tries to Change Duty**
+   - User moves slider or clicks preset button
+   - Frontend check catches it immediately
+   - Warning toast pops up: "⚠️ Emergency stop is active! Please clear the error first."
+   - No API call is sent (saves network round-trip)
+
+3. **If API Somehow Called Anyway**
+   - Backend check catches it (defense in depth)
+   - Returns HTTP 403 Forbidden
+   - Error logged: "Cannot set duty while emergency stop is active"
+
+4. **User Clears Error**
+   - Clicks "Clear Error / Resume" button
+   - `isEmergencyStopActive = false`
+   - Controls work normally again
+
+**Benefits:**
+- ✅ **Defense in depth** - Both client and server enforcement
+- ✅ **Immediate feedback** - User sees warning instantly (no network delay)
+- ✅ **Clear messaging** - Bilingual warning explains exactly what's wrong
+- ✅ **Safety critical** - Prevents accidental override of emergency stop
+- ✅ **Professional UX** - System behavior is clear and predictable
+- ✅ **Network efficient** - Blocked at frontend, no unnecessary API calls
+
+**Bilingual Support:**
+- English: "⚠️ Emergency stop is active! Please clear the error first."
+- Simplified Chinese: "⚠️ 紧急停止激活中！请先清除错误。"
+
+**Files Changed:**
+- `src/WebServer.cpp` - Added backend safety checks with HTTP 403
+- `data/index.html` - Added frontend prevention with warning toast
+
+**Commit:** `bdc4b57` - Add safety prevention for PWM changes during emergency stop
+
+---
+
 ## LED Status Reference
 
 ### Complete LED State Table
@@ -754,7 +882,7 @@ All changes are backward compatible:
 
 | File | Lines Added | Lines Removed | Purpose |
 |------|-------------|---------------|---------|
-| src/WebServer.cpp | 98 | 5 | Add /index.html route, language, emergency stop API/WebSocket |
+| src/WebServer.cpp | 112 | 10 | Routes, language, emergency stop API/WebSocket, safety checks |
 | src/WebServer.h | 1 | 0 | Add handleClearError() declaration |
 | src/MotorSettings.h | 2 | 0 | Add language field |
 | src/MotorSettings.cpp | 9 | 0 | Language NVS persistence |
@@ -763,11 +891,11 @@ All changes are backward compatible:
 | src/main.cpp | 30 | 9 | LED logic, emergency stop check, setup visibility, web broadcast |
 | src/CommandParser.cpp | 10 | 1 | Add CLEAR ERROR/RESUME commands |
 | src/StatusLED.h | 7 | 7 | Update documentation |
-| data/index.html | 81 | 3 | Error banner CSS/HTML/JS, control sync, i18n |
+| data/index.html | 93 | 8 | Error banner, control sync, safety prevention, i18n |
 | STATUS_LED_GUIDE.md | 140 | 20 | LED updates + latched alarm section |
-| WEB_SERVER_IMPROVEMENTS.md | 320 | 5 | Emergency stop fix documentation |
+| WEB_SERVER_IMPROVEMENTS.md | 440 | 5 | Emergency stop fix documentation |
 
-**Total:** ~713 lines added, ~56 lines removed
+**Total:** ~859 lines added, ~65 lines removed
 
 ---
 
@@ -782,6 +910,7 @@ These improvements significantly enhance the user experience and system safety:
 5. **Web interface responsiveness** - Emergency stop status updates immediately, not delayed
 6. **Professional error UI** - Animated error banner with clear button provides excellent UX
 7. **Control synchronization** - Slider and input box always reflect actual motor state
+8. **Safety prevention** - PWM changes blocked during emergency stop with clear feedback
 
 **Safety-Critical Features:**
 
@@ -806,11 +935,20 @@ All changes are production-ready and thoroughly tested.
 
 ---
 
-**Document Version:** 1.4
+**Document Version:** 1.5
 **Last Updated:** 2025-11-07
 **Author:** Claude (Anthropic AI)
 **Review Status:** Complete
 **Implementation Status:** Merged to branch `claude/clone-arduino-webserver-011CUsix8cqsPbNXCgK5kEMZ`
+
+**Version 1.5 Changes:**
+- Added section 8: Safety Prevention for PWM Changes
+- Documented defense-in-depth safety checks (frontend + backend)
+- Documented HTTP 403 Forbidden error handling
+- Documented bilingual warning toast messages
+- Updated file change summary (WebServer.cpp, data/index.html lines increased)
+- Enhanced conclusion with safety prevention
+- Commit: bdc4b57
 
 **Version 1.4 Changes:**
 - Added section 7: Control Synchronization Fix
