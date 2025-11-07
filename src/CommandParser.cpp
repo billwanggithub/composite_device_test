@@ -92,6 +92,12 @@ bool CommandParser::processCommand(const String& cmd, ICommandResponse* response
         return true;
     }
 
+    // 延遲命令 (毫秒)
+    if (upper.startsWith("DELAY ")) {
+        handleDelay(trimmed, response);
+        return true;
+    }
+
     // 清除緊急停止狀態
     if (upper == "CLEAR ERROR" || upper == "CLEAR_ERROR" || upper == "RESUME") {
         motorControl.clearEmergencyStop();
@@ -490,6 +496,9 @@ void CommandParser::handleHelp(ICommandResponse* response) {
     response->println("  READ          - 讀取 HID OUT 緩衝區");
     response->println("  CLEAR         - 清除 HID OUT 緩衝區");
     response->println("");
+    response->println("實用工具:");
+    response->println("  DELAY <ms>    - 延遲指定毫秒數 (1-60000ms)");
+    response->println("");
     response->println("馬達控制:");
     response->println("  SET PWM_FREQ <Hz>    - 設定 PWM 頻率 (10-500000 Hz)");
     response->println("  SET PWM_DUTY <%>     - 設定 PWM 占空比 (0-100%)");
@@ -659,6 +668,32 @@ void CommandParser::handleClear(ICommandResponse* response) {
     } else {
         response->println("錯誤：無法存取緩衝區");
     }
+}
+
+void CommandParser::handleDelay(const String& cmd, ICommandResponse* response) {
+    // Parse delay value in milliseconds
+    // Format: DELAY <ms>
+    int spaceIndex = cmd.indexOf(' ');
+    if (spaceIndex == -1) {
+        response->println("Usage: DELAY <milliseconds>");
+        response->println("Example: DELAY 1000  (delays 1000ms = 1 second)");
+        return;
+    }
+
+    String delayStr = cmd.substring(spaceIndex + 1);
+    delayStr.trim();
+
+    unsigned long delayMs = delayStr.toInt();
+
+    // Validate delay range (1ms to 60000ms = 1 minute max)
+    if (delayMs < 1 || delayMs > 60000) {
+        response->println("Error: Delay must be between 1 and 60000 milliseconds (1ms - 60s)");
+        return;
+    }
+
+    response->printf("Delaying %lu ms...\n", delayMs);
+    delay(delayMs);
+    response->println("Delay completed");
 }
 
 // ==================== Motor Control Command Handlers ====================

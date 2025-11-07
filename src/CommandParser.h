@@ -42,6 +42,7 @@ private:
     void handleSend(ICommandResponse* response);
     void handleRead(ICommandResponse* response);
     void handleClear(ICommandResponse* response);
+    void handleDelay(const String& cmd, ICommandResponse* response);
 
     // Motor control command handlers
     void handleSetPWMFreq(ICommandResponse* response, uint32_t freq);
