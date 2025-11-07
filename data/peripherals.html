@@ -723,10 +723,41 @@
         function updatePeripheralStatus(data) {
             // UART1
             if (data.uart1) {
+                // Update status badge
                 document.getElementById('uart1Mode').textContent = data.uart1.mode || 'DISABLED';
+
+                // Sync combobox with current mode
+                const modeSelect = document.getElementById('uart1ModeSelect');
+                let modeValue = 'DISABLED';
+                if (data.uart1.mode === 'PWM_RPM' || data.uart1.mode === 'PWM/RPM') {
+                    modeValue = 'PWM';
+                } else if (data.uart1.mode === 'UART') {
+                    modeValue = 'UART';
+                } else if (data.uart1.mode === 'DISABLED') {
+                    modeValue = 'DISABLED';
+                }
+                modeSelect.value = modeValue;
+
+                // Update control visibility
+                updateUART1ModeDisplay(modeValue);
+
+                // Update PWM/RPM specific data
                 if (data.uart1.mode === 'PWM_RPM' && data.uart1.rpm_freq !== undefined) {
                     document.getElementById('uart1RpmFreq').textContent = data.uart1.rpm_freq.toFixed(2) + ' Hz';
                 }
+                if (data.uart1.pwm_freq !== undefined) {
+                    document.getElementById('uart1Freq').value = data.uart1.pwm_freq;
+                    document.getElementById('uart1FreqDisplay').textContent = data.uart1.pwm_freq;
+                }
+                if (data.uart1.pwm_duty !== undefined) {
+                    document.getElementById('uart1Duty').value = data.uart1.pwm_duty;
+                    document.getElementById('uart1DutyDisplay').textContent = data.uart1.pwm_duty.toFixed(1);
+                }
+                if (data.uart1.pwm_enabled !== undefined) {
+                    document.getElementById('uart1PwmEnable').checked = data.uart1.pwm_enabled;
+                }
+
+                // Update UART statistics
                 if (data.uart1.tx_bytes !== undefined) {
                     document.getElementById('uart1TxBytes').textContent = data.uart1.tx_bytes;
                     document.getElementById('uart1RxBytes').textContent = data.uart1.rx_bytes;
