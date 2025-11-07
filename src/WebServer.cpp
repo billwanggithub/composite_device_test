@@ -534,17 +534,25 @@ void WebServerManager::handleGetRPM(AsyncWebServerRequest *request) {
 void WebServerManager::handleGetConfig(AsyncWebServerRequest *request) {
     StaticJsonDocument<512> doc;
 
-    if (pMotorSettingsManager) {
+    if (pMotorSettingsManager && pMotorControl) {
         const MotorSettings& settings = pMotorSettingsManager->get();
+
+        // UI configuration
         doc["title"] = "ESP32-S3 Motor Control";
         doc["subtitle"] = "PWM & RPM Monitoring";
         doc["language"] = "en";  // Default to English
         doc["chartUpdateRate"] = settings.rpmUpdateRate;
         doc["ledBrightness"] = settings.ledBrightness;
+
+        // Motor settings - use CURRENT values from MotorControl, not saved settings
         doc["polePairs"] = settings.polePairs;
         doc["maxFrequency"] = settings.maxFrequency;
-        doc["frequency"] = settings.frequency;
-        doc["duty"] = settings.duty;
+        doc["frequency"] = pMotorControl->getPWMFrequency();  // Current actual frequency
+        doc["duty"] = pMotorControl->getPWMDuty();            // Current actual duty
+
+        // Also send RPM for initial display
+        doc["rpm"] = pMotorControl->getCurrentRPM();
+        doc["realInputFrequency"] = pMotorControl->getInputFrequency();
 
         // Check if AP mode is enabled
         if (pWiFiSettings) {
@@ -713,7 +721,20 @@ void WebServerManager::handlePostLoad(AsyncWebServerRequest *request) {
         pMotorControl->setPWMDuty(settings.duty);
         // Note: polePairs are read from settings by MotorControl when calculating RPM
 
-        request->send(200, "application/json", "{\"success\":true,\"message\":\"Settings loaded from EEPROM\"}");
+        // Return the loaded values so the web interface can update
+        StaticJsonDocument<256> doc;
+        doc["success"] = true;
+        doc["message"] = "Settings loaded from EEPROM";
+        doc["frequency"] = settings.frequency;
+        doc["duty"] = settings.duty;
+        doc["polePairs"] = settings.polePairs;
+        doc["maxFrequency"] = settings.maxFrequency;
+        doc["ledBrightness"] = settings.ledBrightness;
+        doc["rpmUpdateRate"] = settings.rpmUpdateRate;
+
+        String json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json);
     } else {
         request->send(500, "application/json", "{\"success\":false,\"error\":\"Failed to load settings\"}");
     }
