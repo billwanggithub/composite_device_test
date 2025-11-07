@@ -704,7 +704,14 @@
                 document.getElementById('ledBrightness').value = data.ledBrightness || 25;
                 document.getElementById('ledBrightnessValue').textContent = data.ledBrightness || 25;
                 document.getElementById('wifiSSID').value = data.wifiSSID || '';
-                document.getElementById('wifiPassword').value = data.wifiPassword || '';
+                // Don't clear password field if server returns empty (for security)
+                // Keep existing value or show placeholder
+                if (data.wifiPassword) {
+                    document.getElementById('wifiPassword').value = data.wifiPassword;
+                } else if (data.wifiSSID) {
+                    // If SSID exists but password is empty (security), show placeholder
+                    document.getElementById('wifiPassword').placeholder = '(已保存 / Saved)';
+                }
 
                 // 載入 AP 模式設定
                 const apResponse = await fetch('/api/ap-mode');
@@ -743,7 +750,10 @@
                 updateIfNotFocused('polePairs', data.polePairs || 2);
                 updateIfNotFocused('rpmUpdateRate', data.rpmUpdateRate || 100);
                 updateIfNotFocused('wifiSSID', data.wifiSSID);
-                updateIfNotFocused('wifiPassword', data.wifiPassword);
+                // Don't update password field if server returns empty (for security)
+                if (data.wifiPassword) {
+                    updateIfNotFocused('wifiPassword', data.wifiPassword);
+                }
 
                 // LED brightness 特殊處理（同時更新滑桿和顯示值）
                 const ledBrightnessEl = document.getElementById('ledBrightness');
