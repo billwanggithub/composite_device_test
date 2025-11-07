@@ -1806,7 +1806,17 @@
                 elements.statusPoles.textContent = data.polePairs;
                 elements.statusUptime.textContent = data.uptime;
                 elements.statusHeap.textContent = `${Math.round(data.freeHeap / 1024)} KB`;
-                
+
+                // Update control sliders and inputs to match current motor state
+                if (data.frequency !== undefined) {
+                    elements.freqSlider.value = data.frequency;
+                    elements.freqInput.value = data.frequency;
+                }
+                if (data.duty !== undefined) {
+                    elements.dutySlider.value = data.duty;
+                    elements.dutyInput.value = data.duty;
+                }
+
                 // Update WiFi status
                 if (data.wifiConnected) {
                     elements.wifiStatus.className = 'connection-status connected';
