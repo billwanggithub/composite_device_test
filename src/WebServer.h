@@ -7,6 +7,9 @@
 #include <SPIFFS.h>
 #include "WiFiSettings.h"
 #include "MotorControl.h"
+
+// Forward declaration
+class WiFiSettingsManager;
 #include "MotorSettings.h"
 #include "WiFiManager.h"
 #include "StatusLED.h"
@@ -33,6 +36,7 @@ public:
      * @param wifiManager Pointer to WiFi manager
      * @param statusLED Pointer to status LED controller
      * @param peripheralManager Pointer to peripheral manager
+     * @param wifiSettingsManager Pointer to WiFi settings manager
      * @return true if successful
      */
     bool begin(WiFiSettings* wifiSettings,
@@ -40,7 +44,8 @@ public:
                MotorSettingsManager* motorSettingsManager,
                WiFiManager* wifiManager,
                StatusLED* statusLED = nullptr,
-               PeripheralManager* peripheralManager = nullptr);
+               PeripheralManager* peripheralManager = nullptr,
+               WiFiSettingsManager* wifiSettingsManager = nullptr);
 
     /**
      * @brief Start web server
@@ -94,6 +99,7 @@ private:
     WiFiManager* pWiFiManager = nullptr;
     StatusLED* pStatusLED = nullptr;
     PeripheralManager* pPeripheralManager = nullptr;
+    WiFiSettingsManager* pWiFiSettingsManager = nullptr;
 
     bool running = false;
     unsigned long lastWSBroadcast = 0;

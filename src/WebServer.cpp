@@ -11,7 +11,8 @@ bool WebServerManager::begin(WiFiSettings* wifiSettings,
                              MotorSettingsManager* motorSettingsManager,
                              WiFiManager* wifiManager,
                              StatusLED* statusLED,
-                             PeripheralManager* peripheralManager) {
+                             PeripheralManager* peripheralManager,
+                             WiFiSettingsManager* wifiSettingsManager) {
     if (!wifiSettings || !motorControl || !motorSettingsManager || !wifiManager) {
         Serial.println("❌ WebServerManager::begin() - NULL pointer!");
         return false;
@@ -23,6 +24,7 @@ bool WebServerManager::begin(WiFiSettings* wifiSettings,
     pWiFiManager = wifiManager;
     pStatusLED = statusLED;
     pPeripheralManager = peripheralManager;
+    pWiFiSettingsManager = wifiSettingsManager;
 
     // Create server instance
     server = new AsyncWebServer(wifiSettings->web_port);
@@ -783,18 +785,43 @@ void WebServerManager::handlePostConfig(AsyncWebServerRequest *request) {
 
             // WiFi settings
             if (doc.containsKey("wifiSSID") || doc.containsKey("wifiPassword")) {
-                // Note: WiFi settings need WiFiSettingsManager access
-                // For now, log that we received them
-                if (doc.containsKey("wifiSSID")) {
-                    const char* ssid = doc["wifiSSID"];
-                    Serial.printf("📡 WiFi SSID received: %s\n", ssid);
-                    // TODO: Save to WiFiSettings via WiFiSettingsManager
+                bool wifiUpdated = false;
+
+                if (pWiFiSettingsManager) {
+                    WiFiSettings& wifiSettings = pWiFiSettingsManager->get();
+
+                    if (doc.containsKey("wifiSSID")) {
+                        const char* ssid = doc["wifiSSID"];
+                        Serial.printf("📡 WiFi SSID received: %s\n", ssid);
+                        strncpy(wifiSettings.sta_ssid, ssid, sizeof(wifiSettings.sta_ssid) - 1);
+                        wifiSettings.sta_ssid[sizeof(wifiSettings.sta_ssid) - 1] = '\0';
+                        wifiUpdated = true;
+                    }
+
+                    if (doc.containsKey("wifiPassword")) {
+                        const char* password = doc["wifiPassword"];
+                        Serial.println("📡 WiFi password received");
+                        // Only update password if not empty (empty means keep existing)
+                        if (password && strlen(password) > 0) {
+                            strncpy(wifiSettings.sta_password, password, sizeof(wifiSettings.sta_password) - 1);
+                            wifiSettings.sta_password[sizeof(wifiSettings.sta_password) - 1] = '\0';
+                            wifiUpdated = true;
+                        }
+                    }
+
+                    if (wifiUpdated) {
+                        if (pWiFiSettingsManager->save()) {
+                            Serial.println("💾 WiFi settings saved to NVS");
+                            updateMessage += "WiFi settings saved. ";
+                        } else {
+                            Serial.println("❌ Failed to save WiFi settings");
+                            updateMessage += "WiFi settings save failed. ";
+                        }
+                    }
+                } else {
+                    Serial.println("⚠️ WiFiSettingsManager not available");
+                    updateMessage += "WiFi settings manager not available. ";
                 }
-                if (doc.containsKey("wifiPassword")) {
-                    Serial.println("📡 WiFi password received");
-                    // TODO: Save to WiFiSettings via WiFiSettingsManager
-                }
-                updateMessage += "WiFi settings require implementation. ";
             }
 
             // BLE device name

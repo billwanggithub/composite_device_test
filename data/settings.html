@@ -749,7 +749,10 @@
                 updateIfNotFocused('maxSafeRPM', data.maxSafeRPM || 500000);
                 updateIfNotFocused('polePairs', data.polePairs || 2);
                 updateIfNotFocused('rpmUpdateRate', data.rpmUpdateRate || 100);
-                updateIfNotFocused('wifiSSID', data.wifiSSID);
+                // Don't update SSID if server returns empty (keeps user input)
+                if (data.wifiSSID) {
+                    updateIfNotFocused('wifiSSID', data.wifiSSID);
+                }
                 // Don't update password field if server returns empty (for security)
                 if (data.wifiPassword) {
                     updateIfNotFocused('wifiPassword', data.wifiPassword);
