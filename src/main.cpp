@@ -631,7 +631,8 @@ void setup() {
         &motorControl,
         &motorSettingsManager,
         &wifiManager,
-        &statusLED
+        &statusLED,
+        &peripheralManager
     )) {
         USBSerial.println("❌ Web server initialization failed!");
     } else {

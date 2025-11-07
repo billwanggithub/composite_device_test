@@ -10,7 +10,8 @@ bool WebServerManager::begin(WiFiSettings* wifiSettings,
                              MotorControl* motorControl,
                              MotorSettingsManager* motorSettingsManager,
                              WiFiManager* wifiManager,
-                             StatusLED* statusLED) {
+                             StatusLED* statusLED,
+                             PeripheralManager* peripheralManager) {
     if (!wifiSettings || !motorControl || !motorSettingsManager || !wifiManager) {
         Serial.println("❌ WebServerManager::begin() - NULL pointer!");
         return false;
@@ -21,6 +22,7 @@ bool WebServerManager::begin(WiFiSettings* wifiSettings,
     pMotorSettingsManager = motorSettingsManager;
     pWiFiManager = wifiManager;
     pStatusLED = statusLED;
+    pPeripheralManager = peripheralManager;
 
     // Create server instance
     server = new AsyncWebServer(wifiSettings->web_port);
@@ -355,6 +357,47 @@ void WebServerManager::setupRoutes() {
 
     server->on("/ncsi.txt", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send(200, "text/plain", "Microsoft NCSI");
+    });
+
+    // Peripheral API endpoints
+    server->on("/api/peripherals", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        handleGetPeripheralStatus(request);
+    });
+
+    server->on("/api/uart1/status", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        handleGetUART1Status(request);
+    });
+
+    server->on("/api/uart1/mode", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        handlePostUART1Mode(request);
+    });
+
+    server->on("/api/uart1/pwm", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        handlePostUART1PWM(request);
+    });
+
+    server->on("/api/uart2/status", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        handleGetUART2Status(request);
+    });
+
+    server->on("/api/buzzer", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        handlePostBuzzer(request);
+    });
+
+    server->on("/api/led", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        handlePostLEDPWM(request);
+    });
+
+    server->on("/api/relay", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        handlePostRelay(request);
+    });
+
+    server->on("/api/gpio", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        handlePostGPIO(request);
+    });
+
+    server->on("/api/keys", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        handleGetKeys(request);
     });
 
     // 404 handler

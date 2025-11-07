@@ -10,6 +10,7 @@
 #include "MotorSettings.h"
 #include "WiFiManager.h"
 #include "StatusLED.h"
+#include "PeripheralManager.h"
 
 /**
  * @brief Web Server Manager
@@ -31,13 +32,15 @@ public:
      * @param motorSettingsManager Pointer to motor settings manager
      * @param wifiManager Pointer to WiFi manager
      * @param statusLED Pointer to status LED controller
+     * @param peripheralManager Pointer to peripheral manager
      * @return true if successful
      */
     bool begin(WiFiSettings* wifiSettings,
                MotorControl* motorControl,
                MotorSettingsManager* motorSettingsManager,
                WiFiManager* wifiManager,
-               StatusLED* statusLED = nullptr);
+               StatusLED* statusLED = nullptr,
+               PeripheralManager* peripheralManager = nullptr);
 
     /**
      * @brief Start web server
@@ -90,6 +93,7 @@ private:
     MotorSettingsManager* pMotorSettingsManager = nullptr;
     WiFiManager* pWiFiManager = nullptr;
     StatusLED* pStatusLED = nullptr;
+    PeripheralManager* pPeripheralManager = nullptr;
 
     bool running = false;
     unsigned long lastWSBroadcast = 0;
@@ -160,6 +164,18 @@ private:
     void handlePostAPMode(AsyncWebServerRequest *request);
     void handlePostSave(AsyncWebServerRequest *request);
     void handlePostLoad(AsyncWebServerRequest *request);
+
+    // Peripheral API handlers
+    void handleGetPeripheralStatus(AsyncWebServerRequest *request);
+    void handleGetUART1Status(AsyncWebServerRequest *request);
+    void handlePostUART1Mode(AsyncWebServerRequest *request);
+    void handlePostUART1PWM(AsyncWebServerRequest *request);
+    void handleGetUART2Status(AsyncWebServerRequest *request);
+    void handlePostBuzzer(AsyncWebServerRequest *request);
+    void handlePostLEDPWM(AsyncWebServerRequest *request);
+    void handlePostRelay(AsyncWebServerRequest *request);
+    void handlePostGPIO(AsyncWebServerRequest *request);
+    void handleGetKeys(AsyncWebServerRequest *request);
 };
 
 #endif // WEB_SERVER_H
