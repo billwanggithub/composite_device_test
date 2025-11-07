@@ -246,6 +246,36 @@ bool CommandParser::processCommand(const String& cmd, ICommandResponse* response
         return false;
     }
 
+    // WiFi 狀態
+    if (upper == "WIFI STATUS") {
+        handleWiFiStatus(response);
+        return true;
+    }
+
+    // WiFi 啟動
+    if (upper == "WIFI START") {
+        handleWiFiStart(response);
+        return true;
+    }
+
+    // WiFi 停止
+    if (upper == "WIFI STOP") {
+        handleWiFiStop(response);
+        return true;
+    }
+
+    // WiFi 掃描
+    if (upper == "WIFI SCAN") {
+        handleWiFiScan(response);
+        return true;
+    }
+
+    // Web 伺服器狀態
+    if (upper == "WEB STATUS") {
+        handleWebStatus(response);
+        return true;
+    }
+
     // 未知命令
     response->print("未知命令: ");
     response->println(trimmed.c_str());
@@ -344,6 +374,13 @@ void CommandParser::handleHelp(ICommandResponse* response) {
     response->println("  SAVE          - 儲存設定到 NVS");
     response->println("  LOAD          - 從 NVS 載入設定");
     response->println("  RESET         - 重設為出廠預設值");
+    response->println("");
+    response->println("WiFi & Web 伺服器:");
+    response->println("  WIFI STATUS   - 顯示 WiFi 連線狀態");
+    response->println("  WIFI START    - 啟動 WiFi");
+    response->println("  WIFI STOP     - 停止 WiFi");
+    response->println("  WIFI SCAN     - 掃描可用網路");
+    response->println("  WEB STATUS    - 顯示 Web 伺服器狀態");
     response->println("");
     response->println("支援的介面:");
     response->println("  - USB CDC (序列埠)");
@@ -718,6 +755,100 @@ void CommandParser::handleFilterStatus(ICommandResponse* response) {
         response->println("⚙️ PWM 漸變進行中...");
         response->printf("  當前頻率: %d Hz\n", motorControl.getPWMFrequency());
         response->printf("  當前占空比: %.1f%%\n", motorControl.getPWMDuty());
+    }
+
+    response->println("");
+}
+
+// ==================== WiFi and Web Server Commands ====================
+
+void CommandParser::handleWiFiStatus(ICommandResponse* response) {
+    response->println("=== WiFi 狀態 ===");
+
+    const WiFiSettings& settings = wifiSettingsManager.get();
+
+    response->printf("模式: %s\n", wifiManager.getModeString().c_str());
+    response->printf("狀態: %s\n", wifiManager.isConnected() ? "已連接" : "未連接");
+    response->printf("IP 位址: %s\n", wifiManager.getIPAddress().c_str());
+
+    if (settings.mode == WiFiMode::AP || settings.mode == WiFiMode::AP_STA) {
+        response->println("");
+        response->println("Access Point:");
+        response->printf("  SSID: %s\n", settings.ap_ssid);
+        response->printf("  Channel: %d\n", settings.ap_channel);
+        response->printf("  Clients: %d\n", wifiManager.getClientCount());
+    }
+
+    if (settings.mode == WiFiMode::STA || settings.mode == WiFiMode::AP_STA) {
+        response->println("");
+        response->println("Station:");
+        response->printf("  SSID: %s\n", settings.sta_ssid);
+        response->printf("  DHCP: %s\n", settings.sta_dhcp ? "Enabled" : "Disabled");
+        if (wifiManager.isConnected()) {
+            response->printf("  RSSI: %d dBm\n", wifiManager.getRSSI());
+        }
+    }
+
+    response->println("");
+}
+
+void CommandParser::handleWiFiStart(ICommandResponse* response) {
+    response->println("🔧 啟動 WiFi...");
+
+    if (wifiManager.start()) {
+        response->println("✅ WiFi 啟動成功");
+        response->printf("  IP 位址: %s\n", wifiManager.getIPAddress().c_str());
+        response->printf("  模式: %s\n", wifiManager.getModeString().c_str());
+    } else {
+        response->println("❌ WiFi 啟動失敗");
+    }
+}
+
+void CommandParser::handleWiFiStop(ICommandResponse* response) {
+    wifiManager.stop();
+    response->println("✅ WiFi 已停止");
+}
+
+void CommandParser::handleWiFiScan(ICommandResponse* response) {
+    response->println("🔍 掃描 WiFi 網路...");
+
+    int n = wifiManager.scanNetworks();
+
+    if (n <= 0) {
+        response->println("⚠️ 未找到網路");
+        return;
+    }
+
+    response->printf("找到 %d 個網路:\n\n", n);
+    response->println("SSID                             | RSSI  | Secure");
+    response->println("----------------------------------+-------+--------");
+
+    for (int i = 0; i < n && i < 20; i++) {
+        String ssid;
+        int8_t rssi;
+        bool secure;
+
+        if (wifiManager.getScanResult(i, ssid, rssi, secure)) {
+            char line[64];
+            snprintf(line, sizeof(line), "%-32s | %4d  | %s",
+                    ssid.c_str(), rssi, secure ? "Yes" : "No");
+            response->println(line);
+        }
+    }
+
+    response->println("");
+}
+
+void CommandParser::handleWebStatus(ICommandResponse* response) {
+    response->println("=== Web 伺服器狀態 ===");
+
+    response->printf("執行中: %s\n", webServerManager.isRunning() ? "是" : "否");
+    response->printf("連接埠: %d\n", wifiSettingsManager.get().web_port);
+    response->printf("WebSocket 客戶端: %d\n", webServerManager.getWSClientCount());
+
+    if (wifiManager.isConnected()) {
+        response->println("");
+        response->printf("存取網址: http://%s/\n", wifiManager.getIPAddress().c_str());
     }
 
     response->println("");
