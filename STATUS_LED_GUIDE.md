@@ -1,6 +1,6 @@
 # Status LED Guide - WS2812 RGB LED Indicator
 
-**Date:** 2025-11-06
+**Date:** 2025-11-07
 **Hardware:** WS2812 RGB LED on GPIO 48
 **Library:** Adafruit NeoPixel v1.12.0
 
@@ -8,7 +8,7 @@
 
 ## Overview
 
-The status LED provides visual feedback for system state using a single WS2812 RGB LED (NeoPixel). The LED automatically changes color based on motor control state, BLE connection, and system errors.
+The status LED provides visual feedback for system state using a single WS2812 RGB LED (NeoPixel). The LED automatically changes color based on motor control state, BLE connection, web server status, and system errors.
 
 ---
 
@@ -37,14 +37,16 @@ GND ─────────────────────────�
 
 ## LED Color Codes
 
-| Color | State | Meaning |
-|-------|-------|---------|
-| **Green** (Solid) | System Ready | Motor idle, no errors |
-| **Blue** (Solid) | Motor Running | PWM duty > 0%, motor active |
-| **Purple** (Solid) | BLE Connected | BLE client connected |
-| **Yellow** (Blinking, 200ms) | Initializing | System starting up |
-| **Red** (Blinking, 500ms) | Error/Emergency | Safety alert, emergency stop |
-| **Off** | Not Initialized | System not started |
+| Color | State | Blink Rate | Meaning |
+|-------|-------|-----------|---------|
+| **Red** (Blinking) | CRITICAL ERROR | **100ms (10 Hz)** | Emergency stop, safety alert, initialization failure |
+| **Yellow** (Blinking) | Web Server Not Ready | 500ms (2 Hz) | WiFi connected but web server not started |
+| **Yellow** (Blinking) | Initializing | 200ms (5 Hz) | System starting up, BLE/WiFi initializing |
+| **Purple** (Solid) | BLE Connected | - | BLE client connected (highest normal priority) |
+| **Yellow** (Solid) | Ramping | - | Motor frequency/duty ramping in progress |
+| **Blue** (Solid) | Motor Running | - | PWM duty > 0.1%, motor active |
+| **Green** (Solid) | System Ready | - | Motor idle, no errors, web server running |
+| **Off** | Not Initialized | - | System not started |
 
 ---
 
@@ -83,30 +85,79 @@ SET LED_BRIGHTNESS <0-255>
 
 ## Automatic State Indication
 
-The LED automatically changes based on system state (updated every 1 second):
+The LED automatically changes based on system state (updated every 200ms for fast response):
 
 ### Priority Order (highest to lowest)
 
-1. **Emergency Stop** (Red Blinking)
-   - Triggered by safety check failure
-   - Overspeed or critical error
-   - Manual emergency stop command
+1. **CRITICAL ERROR** (Red Blinking, **100ms**)
+   - **HIGHEST PRIORITY** - Overrides all other states
+   - Emergency stop activated (safety check failure)
+   - Watchdog timeout detected
+   - Motor control initialization failure
+   - FreeRTOS resource creation failure
+   - **Very fast blinking (10 Hz)** for immediate attention
 
-2. **BLE Connected** (Purple Solid)
+2. **Web Server Not Ready** (Yellow Blinking, 500ms)
+   - WiFi connected but web server not started
+   - Indicates system waiting for web server
+   - Helps identify web server startup issues
+
+3. **BLE Connected** (Purple Solid)
    - BLE client connected to device
    - Overrides motor state indication
 
-3. **Motor Running** (Blue Solid)
+4. **Motor Ramping** (Yellow Solid)
+   - Frequency or duty cycle ramping in progress
+   - Smooth transition between values
+
+5. **Motor Running** (Blue Solid)
    - PWM duty cycle > 0.1%
    - Motor actively controlled
 
-4. **System Ready** (Green Solid)
+6. **System Ready** (Green Solid)
    - Motor idle (duty = 0%)
+   - Web server running
    - System healthy and ready
 
-5. **Initializing** (Yellow Blinking)
-   - Only during system startup
-   - Changes to Green when complete
+7. **Initializing** (Yellow Blinking, 200ms)
+   - Only during system startup (setup() function)
+   - Changes to normal state when motorTask starts
+
+---
+
+## Initialization LED Visibility
+
+**Important:** The LED now properly blinks during the entire boot process!
+
+During `setup()` initialization, `statusLED.update()` is called at strategic points to ensure the LED blinks visibly:
+
+### Initialization Phases with LED Feedback
+
+1. **USB Serial Wait** (up to 5 seconds)
+   - LED: Yellow blinking (200ms)
+   - Updates every 100ms during wait loop
+
+2. **WiFi Initialization**
+   - LED: Yellow blinking (200ms)
+   - Updates before/after WiFi start
+   - Updates before web server start
+
+3. **BLE Initialization**
+   - LED: Yellow blinking (200ms)
+   - Updates during BLE device init
+   - Updates after service start
+   - Updates after advertising start
+
+4. **Task Creation**
+   - LED: Yellow blinking (200ms)
+   - Updates before creating FreeRTOS tasks
+
+**After `setup()` completes:**
+- `motorTask` takes over LED control
+- LED updates every 200ms based on system state
+- `loop()` continues calling `update()` for blink timing
+
+This ensures you can **visually monitor** the boot process and identify where initialization might be stuck.
 
 ---
 
@@ -253,9 +304,11 @@ void loop() {
 ## Performance Characteristics
 
 ### Update Timing
-- **Update Rate:** 50 ms (20 Hz) in main loop
+- **Update Rate:** 50 ms (20 Hz) in main loop for blink timing
+- **State Update Rate:** 200 ms (5 Hz) in motorTask for state changes
 - **Blink Precision:** ±50 ms (loop interval dependent)
 - **Blink Range:** 100 ms - 5000 ms (validated)
+- **Critical Error Blink:** 100 ms (10 Hz, very fast for urgent attention)
 - **Color Change Time:** < 1 ms (instant)
 
 ### Power Consumption
@@ -328,14 +381,23 @@ namespace LEDColors {
 ```
 System Boot
     ↓
-[Yellow Blinking] ← Initialization
+[Yellow Blinking, 200ms] ← Initialization (setup() function)
+    ↓                       (Visible during WiFi/BLE/Web server init)
+    ├─→ [Red Blinking, 100ms]** ← CRITICAL ERROR (Motor init fail, etc.)
+    │                               **HIGHEST PRIORITY - OVERRIDES ALL**
     ↓
-[Green Solid] ← System Ready / Motor Idle
+[Yellow Blinking, 500ms] ← Web Server Not Ready (WiFi connected, web server starting)
     ↓
-    ├─→ [Blue Solid] ← Motor Running (duty > 0%)
-    ├─→ [Purple Solid] ← BLE Connected
-    └─→ [Red Blinking] ← Emergency Stop / Error
+[Green Solid] ← System Ready / Motor Idle (web server running)
+    ↓
+    ├─→ [Purple Solid] ← BLE Connected (overrides motor state)
+    ├─→ [Yellow Solid] ← Motor Ramping (smooth transitions)
+    ├─→ [Blue Solid] ← Motor Running (duty > 0.1%)
+    └─→ [Red Blinking, 100ms]** ← Emergency Stop / Safety Alert
+                                    **FAST BLINK - URGENT!**
 ```
+
+**Note:** Red fast blink (100ms) always has highest priority and will override any other state when critical errors occur.
 
 ---
 
@@ -379,6 +441,13 @@ LEDColors::CYAN    = (0, 255, 255)
 
 ---
 
-**Document Version:** 1.0
-**Last Updated:** 2025-11-06
-**Compatible Firmware:** v2.4.0+
+**Document Version:** 2.0
+**Last Updated:** 2025-11-07
+**Compatible Firmware:** v2.5.0+
+
+**Version 2.0 Changes:**
+- Added fast red blink (100ms) for critical errors
+- Added web server not ready indicator (yellow 500ms blink)
+- Updated LED update rate to 200ms for faster response
+- Added LED visibility during setup() initialization
+- Updated priority system with error state override
