@@ -691,11 +691,14 @@
             </select>
         </div>
 
-        <!-- Max Safe RPM Display -->
+        <!-- Max Safe RPM Display and Control -->
         <div class="max-safe-rpm-display">
-            <span class="lang-zh-CN">最大安全轉速：</span>
-            <span class="lang-en">Max Safe RPM: </span>
-            <span id="maxSafeRPMValue" class="max-safe-rpm-value">---</span>
+            <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+                <span class="lang-zh-CN">最大安全轉速：</span>
+                <span class="lang-en">Max Safe RPM: </span>
+                <input type="number" id="maxSafeRPMInput" min="1000" max="1000000" style="width: 120px; padding: 4px 8px; font-size: 1.1em; font-weight: 700; border: 2px solid rgba(255,255,255,0.5); border-radius: 5px; background: rgba(255,255,255,0.2); color: white; text-align: center;" placeholder="500000">
+                <input type="checkbox" id="maxSafeRPMEnabledCheckbox" style="width: 22px; height: 22px; cursor: pointer;" title="Enable/Disable protection">
+            </div>
         </div>
 
         <!-- RPM Display with embedded Toggle -->
@@ -902,7 +905,8 @@
         const elements = {
             rpmValue: document.getElementById('rpmValue'),
             rpmLabel: document.getElementById('rpmLabel'),
-            maxSafeRPMValue: document.getElementById('maxSafeRPMValue'),
+            maxSafeRPMInput: document.getElementById('maxSafeRPMInput'),
+            maxSafeRPMEnabledCheckbox: document.getElementById('maxSafeRPMEnabledCheckbox'),
             polePairsSelect: document.getElementById('polePairsSelect'),
             freqSlider: document.getElementById('freqSlider'),
             freqInput: document.getElementById('freqInput'),
@@ -1392,7 +1396,18 @@
             
             // Pole pairs selection
             elements.polePairsSelect.addEventListener('change', updatePolePairs);
-            
+
+            // Max Safe RPM controls
+            elements.maxSafeRPMInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    updateMaxSafeRPM();
+                }
+            });
+
+            elements.maxSafeRPMEnabledCheckbox.addEventListener('change', () => {
+                updateMaxSafeRPM();
+            });
+
             // Step size changes
             elements.dutyStepSelect.addEventListener('change', () => {
                 const stepSize = parseFloat(elements.dutyStepSelect.value);
@@ -1765,7 +1780,44 @@
                 console.error('Error updating pole pairs:', error);
             }
         }
-        
+
+        async function updateMaxSafeRPM() {
+            const maxSafeRPM = parseInt(elements.maxSafeRPMInput.value);
+            const enabled = elements.maxSafeRPMEnabledCheckbox.checked;
+
+            if (isNaN(maxSafeRPM) || maxSafeRPM < 1000) {
+                showToast('Max Safe RPM must be at least 1000', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        maxSafeRPM: maxSafeRPM,
+                        maxSafeRPMEnabled: enabled
+                    })
+                });
+
+                if (response.ok) {
+                    const statusText = enabled ? 'ENABLED' : 'DISABLED';
+                    console.log(`Max Safe RPM updated to: ${maxSafeRPM} (${statusText})`);
+                    showToast(
+                        currentLanguage === 'zh-CN'
+                            ? `最大安全轉速: ${maxSafeRPM.toLocaleString()} RPM (${enabled ? '已啟用' : '已停用'})`
+                            : `Max Safe RPM: ${maxSafeRPM.toLocaleString()} (${statusText})`,
+                        'success'
+                    );
+                }
+            } catch (error) {
+                console.error('Error updating max safe RPM:', error);
+                showToast('Failed to update max safe RPM', 'error');
+            }
+        }
+
         // Update PWM settings
         async function updatePWM() {
             // Safety check: Prevent PWM changes during emergency stop
@@ -1857,9 +1909,12 @@
                     elements.rpmValue.textContent = realInputFreq.toFixed(2);
                 }
 
-                // Update max safe RPM display
-                if (data.maxSafeRPM !== undefined) {
-                    elements.maxSafeRPMValue.textContent = data.maxSafeRPM.toLocaleString();
+                // Update max safe RPM display (only if not focused)
+                if (data.maxSafeRPM !== undefined && document.activeElement !== elements.maxSafeRPMInput) {
+                    elements.maxSafeRPMInput.value = data.maxSafeRPM;
+                }
+                if (data.maxSafeRPMEnabled !== undefined) {
+                    elements.maxSafeRPMEnabledCheckbox.checked = data.maxSafeRPMEnabled;
                 }
 
                 // Update status panel
@@ -1869,14 +1924,20 @@
                 elements.statusUptime.textContent = data.uptime;
                 elements.statusHeap.textContent = `${Math.round(data.freeHeap / 1024)} KB`;
 
-                // Update control sliders and inputs to match current motor state
+                // Update control sliders and inputs to match current motor state (only if not focused)
                 if (data.frequency !== undefined) {
                     elements.freqSlider.value = data.frequency;
-                    elements.freqInput.value = data.frequency;
+                    // Only update input if user is not currently editing it
+                    if (document.activeElement !== elements.freqInput) {
+                        elements.freqInput.value = data.frequency;
+                    }
                 }
                 if (data.duty !== undefined) {
                     elements.dutySlider.value = data.duty;
-                    elements.dutyInput.value = data.duty;
+                    // Only update input if user is not currently editing it
+                    if (document.activeElement !== elements.dutyInput) {
+                        elements.dutyInput.value = data.duty;
+                    }
                 }
 
                 // Update WiFi status

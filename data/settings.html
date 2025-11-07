@@ -694,7 +694,7 @@
                 document.getElementById('freqStepSize').value = data.freqStepSize || 10;
                 document.getElementById('maxFrequency').value = data.maxFrequency || 100000;
                 document.getElementById('maxSafeRPM').value = data.maxSafeRPM || 500000;
-                document.getElementById('maxSafeRPMEnabled').checked = data.maxSafeRPMEnabled || false;
+                document.getElementById('maxSafeRPMEnabled').checked = (data.maxSafeRPMEnabled === true);
                 document.getElementById('polePairs').value = data.polePairs || 2;
                 document.getElementById('rpmUpdateRate').value = data.rpmUpdateRate || 100;
                 document.getElementById('ledBrightness').value = data.ledBrightness || 25;
