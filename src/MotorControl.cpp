@@ -418,7 +418,11 @@ void MotorControl::emergencyStop() {
         pSettings->duty = 0.0;
         emergencyStopActive = true;
 
+        // Print emergency stop message with RPM information
+        float rpm = getCurrentRPM();
+        uint32_t maxRPM = pSettings ? pSettings->maxSafeRPM : 0;
         Serial.println("⛔ EMERGENCY STOP ACTIVATED - Duty set to 0%");
+        Serial.printf("   Current RPM: %.1f / Max Safe RPM: %u\n", rpm, maxRPM);
     }
 }
 

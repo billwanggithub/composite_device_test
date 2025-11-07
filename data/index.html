@@ -626,17 +626,6 @@
             </div>
         </div>
 
-        <!-- Emergency Stop Error Banner -->
-        <div class="error-banner" id="errorBanner">
-            <div class="error-banner-content">
-                <div>
-                    <span class="error-banner-icon">⛔</span>
-                    <span class="error-banner-text" id="errorBannerText">SAFETY ALERT: Emergency stop activated! Motor is stopped.</span>
-                </div>
-                <button class="btn-warning" onclick="clearError()" data-i18n="clear-error">Clear Error / Resume</button>
-            </div>
-        </div>
-
         <div class="container">
             <div class="header">
                 <div class="header-content">
@@ -696,7 +685,18 @@
                 </label>
             </div>
         </div>
-        
+
+        <!-- Emergency Stop Error Banner -->
+        <div class="error-banner" id="errorBanner">
+            <div class="error-banner-content">
+                <div>
+                    <span class="error-banner-icon">⛔</span>
+                    <span class="error-banner-text" id="errorBannerText">SAFETY ALERT: Emergency stop activated! Motor is stopped.</span>
+                </div>
+                <button class="btn-warning" onclick="clearError()" data-i18n="clear-error">Clear Error / Resume</button>
+            </div>
+        </div>
+
         <!-- RPM Monitor Section -->
         <div class="control-panel" id="rpmMonitorPanel" style="margin-top: 15px; display: none;">
             <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 0;">
@@ -1779,12 +1779,16 @@
                 });
                 const data = await response.json();
 
+                console.log('[DEBUG] RPM Update - Mode:', displayMode, 'Data:', data);
+
                 // Update RPM/Real Input Frequency display based on current mode
                 if (displayMode === 'rpm') {
                     elements.rpmValue.textContent = data.rpm.toFixed(1);
+                    console.log('[DEBUG] Updated RPM display to:', data.rpm.toFixed(1));
                 } else {
                     const realInputFreq = data.realInputFrequency || 0; // Use real input frequency from API
                     elements.rpmValue.textContent = realInputFreq.toFixed(2);
+                    console.log('[DEBUG] Updated Real Input Freq display to:', realInputFreq.toFixed(2));
                 }
             } catch (error) {
                 console.error('Error fetching RPM:', error);
@@ -1803,6 +1807,8 @@
                     }
                 });
                 const data = await response.json();
+
+                console.log('[DEBUG] Status Update - RPM:', data.rpm, 'Freq:', data.frequency, 'Duty:', data.duty);
 
                 // Update RPM/Real Input Frequency display based on current mode
                 if (displayMode === 'rpm') {
