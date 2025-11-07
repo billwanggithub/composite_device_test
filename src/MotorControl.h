@@ -153,6 +153,20 @@ public:
     void emergencyStop();
 
     /**
+     * @brief Check if emergency stop is active
+     * @return true if emergency stop has been triggered
+     */
+    bool isEmergencyStopActive() const;
+
+    /**
+     * @brief Clear emergency stop flag
+     *
+     * Clears the emergency stop condition after the issue has been resolved.
+     * User must explicitly clear the emergency stop to resume normal operation.
+     */
+    void clearEmergencyStop();
+
+    /**
      * @brief Set PWM frequency with ramping
      * @param frequency Target frequency in Hz
      * @param rampTimeMs Ramp duration in milliseconds (0 = immediate)
