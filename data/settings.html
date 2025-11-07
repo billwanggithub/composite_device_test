@@ -856,20 +856,20 @@
                     isEmergencyStopActive = data.emergencyStop;  // Update global state
 
                     if (data.emergencyStop) {
-                        // Update error message with RPM values
-                        const currentRPM = data.rpm ? data.rpm.toFixed(1) : '---';
+                        // Update error message with RPM values (use trigger RPM, not current RPM)
+                        const triggerRPM = data.emergencyStopTriggerRPM ? data.emergencyStopTriggerRPM.toFixed(1) : '---';
                         const maxRPM = data.maxSafeRPM || '---';
                         const message = currentLanguage === 'zh-CN'
-                            ? `⚠️ 安全警報：緊急停止已激活！當前轉速：${currentRPM} RPM / 最大安全轉速：${maxRPM} RPM`
-                            : `⚠️ SAFETY ALERT: Emergency stop activated! Current RPM: ${currentRPM} / Max Safe RPM: ${maxRPM}`;
+                            ? `⚠️ 安全警報：緊急停止已激活！觸發轉速：${triggerRPM} RPM / 最大安全轉速：${maxRPM} RPM`
+                            : `⚠️ SAFETY ALERT: Emergency stop activated! Trigger RPM: ${triggerRPM} / Max Safe RPM: ${maxRPM}`;
                         errorBannerText.textContent = message;
                         errorBanner.classList.add('show');
 
                         // Show popup notification when emergency stop FIRST activates (transition from false to true)
                         if (!wasEmergencyStopped) {
                             const popupMessage = currentLanguage === 'zh-CN'
-                                ? `⛔ 緊急停止激活！\n\n當前轉速：${currentRPM} RPM\n最大安全轉速：${maxRPM} RPM\n\n電機已停止，請檢查並清除錯誤。`
-                                : `⛔ EMERGENCY STOP ACTIVATED!\n\nCurrent RPM: ${currentRPM}\nMax Safe RPM: ${maxRPM}\n\nMotor stopped. Please check and clear error.`;
+                                ? `⛔ 緊急停止激活！\n\n觸發轉速：${triggerRPM} RPM\n最大安全轉速：${maxRPM} RPM\n\n電機已停止，請檢查並清除錯誤。`
+                                : `⛔ EMERGENCY STOP ACTIVATED!\n\nTrigger RPM: ${triggerRPM}\nMax Safe RPM: ${maxRPM}\n\nMotor stopped. Please check and clear error.`;
                             alert(popupMessage);
                         }
                     } else {

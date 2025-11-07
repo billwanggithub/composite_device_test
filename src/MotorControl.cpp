@@ -409,6 +409,9 @@ bool MotorControl::checkSafety() {
 
 void MotorControl::emergencyStop() {
     if (mcpwmInitialized) {
+        // Capture RPM BEFORE stopping (this is the trigger RPM)
+        emergencyStopTriggerRPM = getCurrentRPM();
+
         // Immediately set duty to 0%
         mcpwm_set_duty(PWM_MCPWM_UNIT, PWM_MCPWM_TIMER, MCPWM_OPR_A, 0.0);
         mcpwm_set_duty_type(PWM_MCPWM_UNIT, PWM_MCPWM_TIMER,
@@ -418,11 +421,10 @@ void MotorControl::emergencyStop() {
         pSettings->duty = 0.0;
         emergencyStopActive = true;
 
-        // Print emergency stop message with RPM information
-        float rpm = getCurrentRPM();
+        // Print emergency stop message with RPM information (use trigger RPM)
         uint32_t maxRPM = pSettings ? pSettings->maxSafeRPM : 0;
         Serial.println("⛔ EMERGENCY STOP ACTIVATED - Duty set to 0%");
-        Serial.printf("   Current RPM: %.1f / Max Safe RPM: %u\n", rpm, maxRPM);
+        Serial.printf("   Trigger RPM: %.1f / Max Safe RPM: %u\n", emergencyStopTriggerRPM, maxRPM);
     }
 }
 
@@ -432,7 +434,12 @@ bool MotorControl::isEmergencyStopActive() const {
 
 void MotorControl::clearEmergencyStop() {
     emergencyStopActive = false;
+    emergencyStopTriggerRPM = 0.0;  // Reset trigger RPM
     Serial.println("✅ Emergency stop cleared - Normal operation resumed");
+}
+
+float MotorControl::getEmergencyStopTriggerRPM() const {
+    return emergencyStopTriggerRPM;
 }
 
 void MotorControl::sendPulse() {

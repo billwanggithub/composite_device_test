@@ -499,6 +499,7 @@ String WebServerManager::generateStatusJSON() {
         doc["initialized"] = pMotorControl->isInitialized();
         doc["capture_init"] = pMotorControl->isCaptureInitialized();
         doc["emergencyStop"] = pMotorControl->isEmergencyStopActive();  // Add emergency stop status
+        doc["emergencyStopTriggerRPM"] = pMotorControl->getEmergencyStopTriggerRPM();  // RPM at trigger time
 
         // Format uptime as "H:MM:SS"
         unsigned long uptimeMs = pMotorControl->getUptime();

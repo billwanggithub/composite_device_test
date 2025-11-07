@@ -183,6 +183,12 @@ public:
     void clearEmergencyStop();
 
     /**
+     * @brief Get the RPM value at the time emergency stop was triggered
+     * @return RPM value when emergency stop activated (0 if not triggered)
+     */
+    float getEmergencyStopTriggerRPM() const;
+
+    /**
      * @brief Set PWM frequency with ramping
      * @param frequency Target frequency in Hz
      * @param rampTimeMs Ramp duration in milliseconds (0 = immediate)
@@ -267,6 +273,7 @@ private:
 
     // Safety monitoring
     bool emergencyStopActive = false;
+    float emergencyStopTriggerRPM = 0.0;  // RPM at the time emergency stop was triggered
     unsigned long lastRPMUpdateTime = 0;
     float lastRPM = 0.0;
 

@@ -393,19 +393,20 @@ void motorTask(void* parameter) {
 
             if (!safetyOK || !watchdogOK) {
                 // Emergency stop triggered
+                motorControl.emergencyStop();  // This captures the trigger RPM internally
+
                 if (xSemaphoreTake(serialMutex, pdMS_TO_TICKS(10))) {
                     if (!safetyOK) {
-                        float currentRPM = motorControl.getCurrentRPM();
+                        float triggerRPM = motorControl.getEmergencyStopTriggerRPM();
                         uint32_t maxSafeRPM = motorSettingsManager.get().maxSafeRPM;
                         USBSerial.println("\n⚠️ SAFETY ALERT: Emergency stop activated!");
-                        USBSerial.printf("   Current RPM: %.1f / Max Safe RPM: %u\n", currentRPM, maxSafeRPM);
+                        USBSerial.printf("   Trigger RPM: %.1f / Max Safe RPM: %u\n", triggerRPM, maxSafeRPM);
                     }
                     if (!watchdogOK) {
                         USBSerial.println("\n⚠️ WATCHDOG ALERT: Timeout detected - emergency stop!");
                     }
                     xSemaphoreGive(serialMutex);
                 }
-                motorControl.emergencyStop();
                 // Immediately notify web clients that duty is now 0
                 if (webServerManager.isRunning()) {
                     webServerManager.broadcastStatus();

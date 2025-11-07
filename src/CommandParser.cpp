@@ -706,12 +706,13 @@ void CommandParser::handleMotorStatus(ICommandResponse* response) {
 }
 
 void CommandParser::handleMotorStop(ICommandResponse* response) {
-    float currentRPM = motorControl.getCurrentRPM();
+    motorControl.emergencyStop();  // This captures the trigger RPM internally
+
+    float triggerRPM = motorControl.getEmergencyStopTriggerRPM();
     uint32_t maxSafeRPM = motorSettingsManager.get().maxSafeRPM;
 
-    motorControl.emergencyStop();
     response->println("⛔ 緊急停止已啟動 - 占空比設為 0%");
-    response->printf("   當前 RPM: %.1f / 最大安全 RPM: %u\n", currentRPM, maxSafeRPM);
+    response->printf("   觸發 RPM: %.1f / 最大安全 RPM: %u\n", triggerRPM, maxSafeRPM);
 
     // Notify web clients about emergency stop
     if (webServerManager.isRunning()) {
