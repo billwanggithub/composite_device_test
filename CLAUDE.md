@@ -4,12 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an ESP32-S3 multi-interface console device implementation supporting USB and BLE communication. The device provides a unified command interface accessible through three different protocols:
+This is an ESP32-S3 multi-interface motor control system with comprehensive communication interfaces. The device provides unified control accessible through USB, BLE, and WiFi protocols.
 
 **Communication Interfaces:**
 - **USB CDC**: Serial console for command input/output
 - **USB HID**: 64-byte bidirectional custom protocol (no Report ID)
 - **BLE GATT**: Bluetooth Low Energy command interface with RX/TX characteristics
+- **WiFi**: AP Mode and Station Mode with web-based control interface
+
+**Motor Control Features:**
+- **PWM Output**: High-precision motor control using MCPWM (10 Hz - 500 kHz)
+- **Tachometer Input**: Hardware-based RPM measurement using MCPWM Capture
+- **Web Dashboard**: Full-featured HTML/CSS/JavaScript control interface
+- **REST API**: RESTful HTTP endpoints for remote control
+- **Settings Persistence**: Configuration stored in NVS (Non-Volatile Storage)
+- **Status LED**: WS2812 RGB LED for system state indication
 
 **Important Note:** ESP32-S3 does **not** support Classic Bluetooth (BR/EDR) and therefore does not support Bluetooth Serial Port Profile (SPP). Only BLE (Bluetooth Low Energy) is available.
 
@@ -20,6 +29,7 @@ This is an ESP32-S3 multi-interface console device implementation supporting USB
 - PSRAM: 8 MB Octal PSRAM
 - USB: USB OTG support
 - Bluetooth: BLE only (Classic Bluetooth not supported on ESP32-S3)
+- WiFi: 802.11 b/g/n (2.4 GHz)
 
 ## Changing Board Variants
 
@@ -460,6 +470,335 @@ SCPI commands route responses to their **source interface** (standard SCPI behav
   - BLE bonding and encryption
   - Command authentication
   - Encrypted characteristics
+
+## WiFi and Web Server
+
+### Overview
+
+The system provides comprehensive WiFi connectivity with web-based control interface:
+- **Access Point (AP) Mode**: Creates WiFi hotspot for direct connection
+- **Station (STA) Mode**: Connects to existing WiFi networks
+- **AP+STA Mode**: Simultaneous AP and station operation
+- **Web Dashboard**: Full-featured HTML/CSS/JavaScript control interface
+- **REST API**: RESTful HTTP endpoints for programmatic control
+- **Captive Portal**: Automatic redirection on Android devices
+
+### WiFi Modes
+
+#### Access Point Mode
+
+**Default Configuration:**
+- SSID: `ESP32_Motor_Control`
+- Password: `12345678`
+- IP Address: `192.168.4.1`
+- Subnet Mask: `255.255.255.0`
+- DHCP Range: `192.168.4.2` - `192.168.4.5`
+- Max Clients: 4
+
+**Features:**
+- Captive Portal with DNS server
+- Automatic redirection to control page
+- Connection event monitoring
+- Purple LED indicator when active
+
+**Initialization:**
+```cpp
+void setupWiFiAP() {
+    WiFi.softAPConfig(AP_DEFAULT_IP, AP_GATEWAY, AP_SUBNET);
+    bool apStarted = WiFi.softAP(AP_SSID, AP_PASSWORD, 1, 0, 4);
+
+    if (apStarted) {
+        apModeActive = true;
+        dnsServer.start(53, "*", AP_DEFAULT_IP);
+        setStatusLED(128, 0, 128);  // Purple
+    }
+}
+```
+
+#### Station Mode
+
+**Connection Process:**
+```cpp
+void connectToWiFi(String ssid, String password) {
+    // Set mode based on AP status
+    if (apModeActive) {
+        WiFi.mode(WIFI_AP_STA);  // Dual mode
+    } else {
+        WiFi.mode(WIFI_STA);     // Station only
+    }
+
+    WiFi.begin(ssid.c_str(), password.c_str());
+
+    // Wait up to 15 seconds
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 30) {
+        delay(500);
+        attempts++;
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+        wifiConnected = true;
+        currentSystemState = SYSTEM_WIFI_CONNECTED;
+    }
+}
+```
+
+#### WiFi Event Handling
+
+```cpp
+void WiFiAPEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
+    switch(event) {
+        case ARDUINO_EVENT_WIFI_AP_STACONNECTED:
+            // Client connected - ensure web server is running
+            if (!webServerStarted) {
+                setupWebServer();
+            }
+            break;
+
+        case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED:
+            // Client disconnected
+            break;
+    }
+}
+```
+
+### Web Server
+
+**Library:** ESP32 WebServer (built-in)
+**Port:** 80 (HTTP)
+**File System:** SPIFFS for static files
+
+#### Server Initialization
+
+```cpp
+void setupWebServer() {
+    // Register API endpoints
+    server.on("/", HTTP_GET, handleRoot);
+    server.on("/api/status", HTTP_GET, handleAPIStatus);
+    server.on("/api/pwm", HTTP_POST, handleAPIPWM);
+    server.on("/api/save", HTTP_POST, handleAPISave);
+
+    // Start server
+    server.begin();
+    webServerStarted = true;
+}
+```
+
+#### Captive Portal Implementation
+
+Supports auto-redirect for multiple platforms:
+
+```cpp
+// Android Captive Portal detection
+server.on("/generate_204", HTTP_GET, []() {
+    String html = "<!DOCTYPE html><html><head>";
+    html += "<meta http-equiv='refresh' content='0;url=http://192.168.4.1/'>";
+    html += "</head><body>Redirecting...</body></html>";
+    server.send(200, "text/html", html);
+});
+
+// DNS server redirects all queries to AP IP
+dnsServer.start(53, "*", AP_DEFAULT_IP);
+```
+
+**Supported Detection URLs:**
+- Android: `/generate_204`, `/gen_204`, `/mobile/status.php`
+- Google: `/connectivitycheck.gstatic.com/generate_204`
+- Apple iOS: `/hotspot-detect.html`, `/library/test/success.html`
+- Windows: `/ncsi.txt`
+
+#### REST API Endpoints
+
+**GET Endpoints:**
+
+`GET /api/status` - Complete system status
+```json
+{
+    "frequency": 10000,
+    "duty": 50.0,
+    "polePairs": 2,
+    "maxFrequency": 100000,
+    "rpm": 12450.5,
+    "realInputFrequency": 415.0,
+    "uptime": "1:23:45",
+    "wifiConnected": true,
+    "wifiIP": "192.168.1.100",
+    "bleConnected": false,
+    "freeHeap": 234560,
+    "firmwareVersion": "1.0.0",
+    "ledBrightness": 25,
+    "apModeEnabled": true,
+    "apModeActive": true,
+    "apIP": "192.168.4.1"
+}
+```
+
+`GET /api/rpm` - Current RPM reading
+```json
+{
+    "rpm": 12450.5,
+    "realInputFrequency": 415.0,
+    "polePairs": 2,
+    "frequency": 10000,
+    "duty": 50.0
+}
+```
+
+**POST Endpoints:**
+
+`POST /api/pwm` - Set PWM parameters
+```
+Parameters: frequency (10-500000), duty (0-100)
+Response: {"success": true, "message": "Frequency: 15000Hz Duty: 75.5%"}
+```
+
+`POST /api/save` - Save settings to NVS
+```
+Response: {"success": true, "message": "Settings saved to EEPROM"}
+```
+
+`POST /api/led-brightness` - Set LED brightness
+```
+Parameters: brightness (0-255)
+Response: {"success": true}
+```
+
+`POST /api/ap-mode` - Control AP mode
+```
+Parameters: enabled (true/false)
+Response: {"success": true, "active": true, "ip": "192.168.4.1"}
+```
+
+#### CORS Support
+
+All API endpoints include CORS headers for cross-origin access:
+
+```cpp
+server.sendHeader("Access-Control-Allow-Origin", "*");
+server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+```
+
+### Motor Control Integration
+
+The web interface provides full control over motor functions:
+
+**PWM Control:**
+- Set frequency (10 Hz - 500 kHz)
+- Set duty cycle (0% - 100%)
+- Real-time updates
+
+**RPM Monitoring:**
+- Live RPM display
+- Input frequency measurement
+- Configurable update rate (20-1000 ms)
+
+**Configuration:**
+- Pole pairs setting (1-12)
+- Maximum frequency limit
+- LED brightness control
+- Settings persistence
+
+### WiFi Commands
+
+Available via CDC, HID, and BLE interfaces:
+
+```
+WIFI <ssid> <password>  - Connect to WiFi immediately
+WIFI CONNECT            - Connect using saved credentials
+START_WEB               - Start web server manually
+AP ON                   - Enable Access Point mode
+AP OFF                  - Disable Access Point mode
+AP STATUS               - Show AP status
+IP                      - Show IP address and network info
+```
+
+### Settings Storage
+
+WiFi credentials and configuration are persisted in NVS:
+
+```cpp
+void saveWiFiSettings() {
+    preferences.putString("wifiSSID", motorSettings.wifiSSID);
+    preferences.putString("wifiPass", motorSettings.wifiPassword);
+    preferences.putBool("apModeEn", motorSettings.apModeEnabled);
+}
+
+void loadWiFiSettings() {
+    motorSettings.wifiSSID = preferences.getString("wifiSSID", "");
+    motorSettings.wifiPassword = preferences.getString("wifiPass", "");
+    motorSettings.apModeEnabled = preferences.getBool("apModeEn", true);
+}
+```
+
+### Status LED Indicators
+
+| Color | Status |
+|-------|--------|
+| Blue (blinking, 1s) | BLE Provisioning mode |
+| Yellow (blinking, 0.2s) | WiFi connecting |
+| Purple (solid) | AP mode active |
+| Green (solid) | WiFi connected and running |
+| Red (blinking, 0.5s) | WiFi disconnected |
+
+### Performance Characteristics
+
+**Timing:**
+- Web server response: < 50 ms (typical)
+- API endpoint processing: < 10 ms
+- DNS server response: < 5 ms
+
+**Memory Usage:**
+- Web server: ~30 KB heap
+- SPIFFS: Stores web dashboard files
+- DNS server: ~5 KB heap
+
+**Concurrent Connections:**
+- AP mode: Up to 4 clients
+- Web server: Handles one request at a time (sequential)
+
+### Troubleshooting
+
+**WiFi Connection Fails:**
+1. Verify SSID/password are correct
+2. Check signal strength
+3. Try AP mode (192.168.4.1)
+4. Use `WIFI CONNECT` command
+5. Check serial console for connection attempts
+
+**Web Server Not Accessible:**
+1. Check `webServerStarted` flag
+2. Verify WiFi is connected
+3. Try AP mode
+4. Check IP address with `IP` command
+5. Verify SPIFFS is mounted
+
+**Captive Portal Not Working:**
+1. Ensure AP mode is active
+2. Check DNS server is running
+3. Try manual navigation to 192.168.4.1
+4. Verify device supports captive portal detection
+
+### Security Notes
+
+**Current Implementation:**
+- HTTP only (no HTTPS)
+- No authentication on API endpoints
+- Open WiFi credentials storage
+- Suitable for development and testing
+
+**For Production:**
+- Implement HTTPS with TLS certificates
+- Add API authentication (tokens, OAuth)
+- Encrypt WiFi credentials in NVS
+- Add firewall rules
+- Implement rate limiting
+
+### Related Documentation
+
+For detailed implementation information, see:
+- [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md) - Complete WiFi and Web Server implementation details
+- [WiFi Integration Guide](WIFI_INTEGRATION_GUIDE.md) - Step-by-step integration instructions (if exists)
 
 ## HID 64-Byte Limitation and Solution
 
