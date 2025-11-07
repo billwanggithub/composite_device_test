@@ -288,6 +288,33 @@ float MotorControl::getPWMDuty() const {
     return currentDuty;
 }
 
+bool MotorControl::setPolePairs(uint8_t pairs) {
+    // Validate range
+    if (pairs < MotorLimits::MIN_POLE_PAIRS) {
+        pairs = MotorLimits::MIN_POLE_PAIRS;
+    }
+    if (pairs > MotorLimits::MAX_POLE_PAIRS) {
+        pairs = MotorLimits::MAX_POLE_PAIRS;
+    }
+
+    // Update settings
+    if (pSettings) {
+        pSettings->polePairs = pairs;
+        Serial.printf("✅ Motor pole pairs set to: %d\n", pairs);
+        return true;
+    }
+
+    Serial.println("❌ Cannot set pole pairs - settings not initialized");
+    return false;
+}
+
+uint8_t MotorControl::getPolePairs() const {
+    if (pSettings) {
+        return pSettings->polePairs;
+    }
+    return MotorDefaults::POLE_PAIRS;
+}
+
 void MotorControl::updateRPM() {
     if (!captureInitialized) {
         return;

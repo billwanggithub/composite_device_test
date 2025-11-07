@@ -88,6 +88,22 @@ public:
     float getPWMDuty() const;
 
     /**
+     * @brief Set motor pole pairs
+     * @param pairs Number of pole pairs (1-12)
+     * @return true if pole pairs set successfully
+     *
+     * Updates the pole pair count used for RPM calculation.
+     * The pole pair count affects how tachometer frequency is converted to RPM.
+     */
+    bool setPolePairs(uint8_t pairs);
+
+    /**
+     * @brief Get current motor pole pairs
+     * @return Current pole pair count
+     */
+    uint8_t getPolePairs() const;
+
+    /**
      * @brief Update RPM reading
      *
      * Should be called periodically (e.g., every 100ms) from motor task.
