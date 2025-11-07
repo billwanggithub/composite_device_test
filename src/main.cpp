@@ -403,6 +403,10 @@ void motorTask(void* parameter) {
                     xSemaphoreGive(serialMutex);
                 }
                 motorControl.emergencyStop();
+                // Immediately notify web clients that duty is now 0
+                if (webServerManager.isRunning()) {
+                    webServerManager.broadcastStatus();
+                }
                 // Set LED to FAST blinking red (error) - 100ms for urgent warning
                 statusLED.blinkRed(100);
             }
