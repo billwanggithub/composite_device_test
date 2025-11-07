@@ -91,11 +91,13 @@ The LED automatically changes based on system state (updated every 200ms for fas
 
 1. **CRITICAL ERROR** (Red Blinking, **100ms**)
    - **HIGHEST PRIORITY** - Overrides all other states
+   - **LATCHED ALARM** - Persists until explicitly cleared
    - Emergency stop activated (safety check failure)
    - Watchdog timeout detected
    - Motor control initialization failure
    - FreeRTOS resource creation failure
    - **Very fast blinking (10 Hz)** for immediate attention
+   - **Must clear with:** `CLEAR ERROR` or `RESUME` command
 
 2. **Web Server Not Ready** (Yellow Blinking, 500ms)
    - WiFi connected but web server not started
@@ -158,6 +160,61 @@ During `setup()` initialization, `statusLED.update()` is called at strategic poi
 - `loop()` continues calling `update()` for blink timing
 
 This ensures you can **visually monitor** the boot process and identify where initialization might be stuck.
+
+---
+
+## Latched Alarm Behavior (Safety-Critical)
+
+**Important:** Critical error LED follows a latched alarm pattern for safety:
+
+### How It Works
+
+1. **Error Triggers** → Fast red LED (100ms) starts immediately
+2. **Condition Clears** → Motor stops, safety OK, but **LED keeps blinking**
+3. **Manual Clear Required** → User must explicitly acknowledge error
+4. **LED Resumes Normal** → Only after clear command
+
+### Why Latched Alarms?
+
+This is a **safety-critical system best practice**:
+- ✅ **Cannot be missed** - LED continues even after auto-recovery
+- ✅ **Requires acknowledgment** - User must actively respond
+- ✅ **Audit trail** - Error and clearance logged to serial
+- ✅ **Prevents accidents** - No silent auto-reset
+
+### Clear Commands
+
+To clear the emergency stop and resume normal operation:
+
+```bash
+# Any of these commands work:
+CLEAR ERROR
+CLEAR_ERROR
+RESUME
+
+# Response:
+✅ 錯誤已清除 - 系統已恢復正常
+Emergency error cleared - System resumed
+
+# LED returns to normal state
+```
+
+### Example Scenario
+
+```
+1. Motor running at high speed
+2. Overspeed detected (RPM > max)
+   → Serial: "⚠️ SAFETY ALERT: Emergency stop activated!"
+   → LED: Fast red blink (100ms) starts
+   → Motor: Stops immediately
+3. RPM drops to zero (condition cleared)
+   → LED: Still blinking red (latched!)
+4. User types: RESUME
+   → Serial: "✅ Emergency stop cleared"
+   → LED: Returns to green (system ready)
+```
+
+**Note:** Emergency stop flag persists across the entire system - all interfaces (CDC, HID, BLE, Web) will see the error state until explicitly cleared.
 
 ---
 
@@ -441,9 +498,15 @@ LEDColors::CYAN    = (0, 255, 255)
 
 ---
 
-**Document Version:** 2.0
+**Document Version:** 2.1
 **Last Updated:** 2025-11-07
-**Compatible Firmware:** v2.5.0+
+**Compatible Firmware:** v2.6.0+
+
+**Version 2.1 Changes:**
+- Added latched alarm behavior section (safety-critical)
+- Documented CLEAR ERROR / RESUME commands
+- Added emergency stop clearance workflow
+- Explained why errors persist after condition clears
 
 **Version 2.0 Changes:**
 - Added fast red blink (100ms) for critical errors
