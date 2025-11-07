@@ -412,12 +412,14 @@ void motorTask(void* parameter) {
         // Update LED based on system state every 200ms for faster response
         if (now - lastLEDUpdate >= pdMS_TO_TICKS(200)) {
             // Priority 1: Check for error states FIRST - don't overwrite error LED
+            bool emergencyStopActive = motorControl.isEmergencyStopActive();
             bool safetyOK = motorControl.checkSafety();
             bool watchdogOK = motorControl.checkWatchdog();
 
-            if (!safetyOK || !watchdogOK) {
-                // Keep fast red blink for errors (already set in safety check above)
-                // Don't change LED state here
+            if (emergencyStopActive || !safetyOK || !watchdogOK) {
+                // Keep fast red blink for errors (highest priority)
+                // Emergency stop flag persists until explicitly cleared
+                // Don't change LED state here - error LED must stay visible
             }
             // Priority 2: Web server not ready - blink yellow as warning
             else if (!webServerManager.isRunning()) {

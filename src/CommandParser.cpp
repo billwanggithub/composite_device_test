@@ -92,6 +92,14 @@ bool CommandParser::processCommand(const String& cmd, ICommandResponse* response
         return true;
     }
 
+    // 清除緊急停止狀態
+    if (upper == "CLEAR ERROR" || upper == "CLEAR_ERROR" || upper == "RESUME") {
+        motorControl.clearEmergencyStop();
+        response->println("✅ 錯誤已清除 - 系統已恢復正常");
+        response->println("Emergency error cleared - System resumed");
+        return true;
+    }
+
     // RPM 讀取
     if (upper == "RPM") {
         handleRPM(response);
@@ -378,6 +386,7 @@ void CommandParser::handleHelp(ICommandResponse* response) {
     response->println("  RPM               - 顯示當前 RPM 讀數");
     response->println("  MOTOR STATUS      - 顯示馬達控制狀態");
     response->println("  MOTOR STOP        - 緊急停止（設定占空比為 0%）");
+    response->println("  CLEAR ERROR (or RESUME) - 清除緊急停止狀態");
     response->println("");
     response->println("進階功能 (Priority 3):");
     response->println("  RAMP PWM_FREQ <Hz> <ms>  - 漸變 PWM 頻率");

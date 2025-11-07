@@ -395,6 +395,15 @@ void MotorControl::emergencyStop() {
     }
 }
 
+bool MotorControl::isEmergencyStopActive() const {
+    return emergencyStopActive;
+}
+
+void MotorControl::clearEmergencyStop() {
+    emergencyStopActive = false;
+    Serial.println("✅ Emergency stop cleared - Normal operation resumed");
+}
+
 void MotorControl::sendPulse() {
     digitalWrite(PULSE_OUTPUT_PIN, HIGH);
     delayMicroseconds(PULSE_WIDTH_US);
