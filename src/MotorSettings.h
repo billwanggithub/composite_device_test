@@ -17,6 +17,7 @@ struct MotorSettings {
     uint32_t maxSafeRPM = 500000;      // Overspeed protection threshold
     uint8_t ledBrightness = 25;        // RGB LED brightness (0-255)
     uint32_t rpmUpdateRate = 100;      // RPM update interval in ms (20-1000)
+    char language[10] = "en";          // UI language (en, zh-CN, zh-TW)
 };
 
 /**
@@ -89,6 +90,7 @@ private:
     static const char* KEY_MAX_SAFE_RPM;
     static const char* KEY_LED_BRIGHTNESS;
     static const char* KEY_RPM_UPDATE_RATE;
+    static const char* KEY_LANGUAGE;
 };
 
 // Default configuration values

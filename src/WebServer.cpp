@@ -276,9 +276,22 @@ void WebServerManager::setupRoutes() {
         handleGetConfig(request);
     });
 
-    server->on("/api/config", HTTP_POST, [this](AsyncWebServerRequest *request) {
-        handlePostConfig(request);
-    });
+    server->on("/api/config", HTTP_POST,
+        [this](AsyncWebServerRequest *request) {
+            handlePostConfig(request);
+        },
+        NULL,  // upload handler
+        [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+            // Body handler - store body data for processing in handlePostConfig
+            if (index == 0) {
+                request->_tempObject = new String();
+            }
+            String* bodyStr = (String*)request->_tempObject;
+            for (size_t i = 0; i < len; i++) {
+                bodyStr->concat((char)data[i]);
+            }
+        }
+    );
 
     server->on("/api/pwm", HTTP_POST, [this](AsyncWebServerRequest *request) {
         handlePostPWM(request);
@@ -549,7 +562,7 @@ void WebServerManager::handleGetConfig(AsyncWebServerRequest *request) {
         // UI configuration
         doc["title"] = "ESP32-S3 Motor Control";
         doc["subtitle"] = "PWM & RPM Monitoring";
-        doc["language"] = "en";  // Default to English
+        doc["language"] = settings.language;  // Return saved language preference
         doc["chartUpdateRate"] = settings.rpmUpdateRate;
         doc["ledBrightness"] = settings.ledBrightness;
 
@@ -578,9 +591,11 @@ void WebServerManager::handleGetConfig(AsyncWebServerRequest *request) {
 }
 
 void WebServerManager::handlePostConfig(AsyncWebServerRequest *request) {
-    // Handle POST parameters
+    // This handler is called after body is parsed
+    // Check if we have JSON body data
     bool updated = false;
 
+    // Handle form parameters (ledBrightness, chartUpdateRate)
     if (request->hasParam("ledBrightness", true)) {
         uint8_t brightness = request->getParam("ledBrightness", true)->value().toInt();
         pMotorSettingsManager->get().ledBrightness = brightness;
@@ -591,6 +606,32 @@ void WebServerManager::handlePostConfig(AsyncWebServerRequest *request) {
         uint32_t rate = request->getParam("chartUpdateRate", true)->value().toInt();
         pMotorSettingsManager->get().rpmUpdateRate = rate;
         updated = true;
+    }
+
+    // For JSON body (language), we need to handle it differently
+    // The body is parsed in the onBody callback
+    if (request->_tempObject != nullptr) {
+        String* bodyStr = (String*)request->_tempObject;
+
+        StaticJsonDocument<256> doc;
+        DeserializationError error = deserializeJson(doc, *bodyStr);
+
+        if (!error) {
+            if (doc.containsKey("language")) {
+                const char* lang = doc["language"];
+                strncpy(pMotorSettingsManager->get().language, lang, sizeof(pMotorSettingsManager->get().language) - 1);
+                pMotorSettingsManager->get().language[sizeof(pMotorSettingsManager->get().language) - 1] = '\0';
+
+                // Save language to NVS immediately
+                pMotorSettingsManager->save();
+
+                updated = true;
+                Serial.printf("✅ Language updated to: %s\n", lang);
+            }
+        }
+
+        delete bodyStr;
+        request->_tempObject = nullptr;
     }
 
     if (updated) {

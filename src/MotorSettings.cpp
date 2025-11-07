@@ -9,6 +9,7 @@ const char* MotorSettingsManager::KEY_MAX_FREQUENCY = "maxFreq";
 const char* MotorSettingsManager::KEY_MAX_SAFE_RPM = "maxRPM";
 const char* MotorSettingsManager::KEY_LED_BRIGHTNESS = "ledBright";
 const char* MotorSettingsManager::KEY_RPM_UPDATE_RATE = "rpmRate";
+const char* MotorSettingsManager::KEY_LANGUAGE = "language";
 
 bool MotorSettingsManager::begin() {
     if (initialized) {
@@ -37,6 +38,11 @@ bool MotorSettingsManager::load() {
     settings.maxSafeRPM = preferences.getUInt(KEY_MAX_SAFE_RPM, MotorDefaults::MAX_SAFE_RPM);
     settings.ledBrightness = preferences.getUChar(KEY_LED_BRIGHTNESS, MotorDefaults::LED_BRIGHTNESS);
     settings.rpmUpdateRate = preferences.getUInt(KEY_RPM_UPDATE_RATE, MotorDefaults::RPM_UPDATE_RATE);
+
+    // Load language (default to "en" if not set)
+    String langStr = preferences.getString(KEY_LANGUAGE, "en");
+    strncpy(settings.language, langStr.c_str(), sizeof(settings.language) - 1);
+    settings.language[sizeof(settings.language) - 1] = '\0';  // Ensure null termination
 
     // Validate loaded values and clamp to safe ranges
     if (settings.frequency < MotorLimits::MIN_FREQUENCY ||
@@ -80,6 +86,7 @@ bool MotorSettingsManager::save() {
     preferences.putUInt(KEY_MAX_SAFE_RPM, settings.maxSafeRPM);
     preferences.putUChar(KEY_LED_BRIGHTNESS, settings.ledBrightness);
     preferences.putUInt(KEY_RPM_UPDATE_RATE, settings.rpmUpdateRate);
+    preferences.putString(KEY_LANGUAGE, settings.language);
 
     return true;
 }
@@ -93,6 +100,8 @@ void MotorSettingsManager::reset() {
     settings.maxSafeRPM = MotorDefaults::MAX_SAFE_RPM;
     settings.ledBrightness = MotorDefaults::LED_BRIGHTNESS;
     settings.rpmUpdateRate = MotorDefaults::RPM_UPDATE_RATE;
+    strncpy(settings.language, "en", sizeof(settings.language) - 1);
+    settings.language[sizeof(settings.language) - 1] = '\0';
 
     // Clear NVS storage
     if (initialized) {
