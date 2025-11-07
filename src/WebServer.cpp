@@ -517,6 +517,7 @@ String WebServerManager::generateStatusJSON() {
         doc["polePairs"] = settings.polePairs;
         doc["maxFrequency"] = settings.maxFrequency;
         doc["maxSafeRPM"] = settings.maxSafeRPM;  // Add max safe RPM for emergency stop display
+        doc["maxSafeRPMEnabled"] = settings.maxSafeRPMEnabled;  // Add enable/disable flag
         doc["ledBrightness"] = settings.ledBrightness;
         doc["rpmUpdateRate"] = settings.rpmUpdateRate;
     }
@@ -603,6 +604,7 @@ void WebServerManager::handleGetConfig(AsyncWebServerRequest *request) {
         doc["polePairs"] = settings.polePairs;
         doc["maxFrequency"] = settings.maxFrequency;
         doc["maxSafeRPM"] = settings.maxSafeRPM;  // Max RPM protection threshold
+        doc["maxSafeRPMEnabled"] = settings.maxSafeRPMEnabled;  // Enable/disable flag
         doc["frequency"] = pMotorControl->getPWMFrequency();  // Current actual frequency
         doc["duty"] = pMotorControl->getPWMDuty();            // Current actual duty
 
@@ -717,6 +719,13 @@ void WebServerManager::handlePostConfig(AsyncWebServerRequest *request) {
                 uint32_t maxRPM = doc["maxSafeRPM"];
                 pMotorSettingsManager->get().maxSafeRPM = maxRPM;
                 Serial.printf("✅ Max safe RPM set to: %u\n", maxRPM);
+                updated = true;
+            }
+
+            if (doc.containsKey("maxSafeRPMEnabled")) {
+                bool enabled = doc["maxSafeRPMEnabled"];
+                pMotorSettingsManager->get().maxSafeRPMEnabled = enabled;
+                Serial.printf("✅ Max safe RPM protection %s\n", enabled ? "ENABLED" : "DISABLED");
                 updated = true;
             }
 

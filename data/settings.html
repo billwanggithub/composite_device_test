@@ -471,10 +471,13 @@
                         <span class="lang-zh-CN">最大安全轉速 (RPM)</span>
                         <span class="lang-en">Max Safe RPM</span>
                     </label>
-                    <input type="number" id="maxSafeRPM" min="1000" max="1000000">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <input type="number" id="maxSafeRPM" min="1000" max="1000000" style="flex: 1;">
+                        <input type="checkbox" id="maxSafeRPMEnabled" style="width: 20px; height: 20px; cursor: pointer;" title="Enable/Disable protection">
+                    </div>
                     <span class="help-text">
-                        <span class="lang-zh-CN">超速保護閾值，超過此轉速將觸發緊急停止</span>
-                        <span class="lang-en">Overspeed protection threshold, emergency stop triggered if exceeded</span>
+                        <span class="lang-zh-CN">超速保護閾值，超過此轉速將觸發緊急停止（勾選以啟用保護）</span>
+                        <span class="lang-en">Overspeed protection threshold, emergency stop triggered if exceeded (check to enable)</span>
                     </span>
                 </div>
                 <div class="form-group">
@@ -691,6 +694,7 @@
                 document.getElementById('freqStepSize').value = data.freqStepSize || 10;
                 document.getElementById('maxFrequency').value = data.maxFrequency || 100000;
                 document.getElementById('maxSafeRPM').value = data.maxSafeRPM || 500000;
+                document.getElementById('maxSafeRPMEnabled').checked = data.maxSafeRPMEnabled || false;
                 document.getElementById('polePairs').value = data.polePairs || 2;
                 document.getElementById('rpmUpdateRate').value = data.rpmUpdateRate || 100;
                 document.getElementById('ledBrightness').value = data.ledBrightness || 25;
@@ -745,7 +749,11 @@
                     document.getElementById('ledBrightnessValue').textContent = brightness;
                 }
 
-                // 更新 AP 模式（checkbox 不需要檢查焦點）
+                // 更新 checkboxes（checkbox 不需要檢查焦點）
+                if (data.maxSafeRPMEnabled !== undefined) {
+                    document.getElementById('maxSafeRPMEnabled').checked = data.maxSafeRPMEnabled;
+                }
+
                 const apResponse = await fetch('/api/ap-mode');
                 const apData = await apResponse.json();
                 if (apData.success) {
@@ -769,6 +777,7 @@
                     language: currentLanguage,
                     maxFrequency: parseInt(document.getElementById('maxFrequency').value),
                     maxSafeRPM: parseInt(document.getElementById('maxSafeRPM').value),
+                    maxSafeRPMEnabled: document.getElementById('maxSafeRPMEnabled').checked,
                     polePairs: parseInt(document.getElementById('polePairs').value),
                     rpmUpdateRate: parseInt(document.getElementById('rpmUpdateRate').value),
                     ledBrightness: parseInt(document.getElementById('ledBrightness').value),
