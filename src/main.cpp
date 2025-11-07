@@ -403,16 +403,22 @@ void motorTask(void* parameter) {
                     xSemaphoreGive(serialMutex);
                 }
                 motorControl.emergencyStop();
-                // Set LED to blinking red (error)
-                statusLED.blinkRed(500);
+                // Set LED to FAST blinking red (error) - 100ms for urgent warning
+                statusLED.blinkRed(100);
             }
             lastSafetyCheck = now;
         }
 
-        // Update LED based on motor state every 1 second
+        // Update LED based on system state every 1 second
         if (now - lastLEDUpdate >= pdMS_TO_TICKS(1000)) {
-            // Determine LED color based on motor state
-            if (bleDeviceConnected) {
+            // Priority 1: Check for error states (handled in safety check above with fast red blink)
+            // Priority 2: Web server not ready - blink orange/yellow as warning
+            if (!webServerManager.isRunning()) {
+                // Web server not ready - blink yellow to indicate waiting for web server
+                statusLED.blinkYellow(500);
+            }
+            // Priority 3: Normal operation states
+            else if (bleDeviceConnected) {
                 // BLE connected - purple
                 statusLED.setPurple();
             } else if (motorControl.isRamping()) {
@@ -449,19 +455,22 @@ void setup() {
     // Load settings from NVS (or use defaults)
     motorSettingsManager.load();
 
-    // Initialize motor control hardware
-    if (!motorControl.begin(&motorSettingsManager.get())) {
-        USBSerial.println("❌ Motor control initialization failed!");
-    } else {
-        USBSerial.println("✅ Motor control initialized successfully");
-    }
-
-    // Initialize status LED
+    // Initialize status LED (must be before motor control for error indication)
     if (!statusLED.begin(48, motorSettingsManager.get().ledBrightness)) {
         USBSerial.println("⚠️ Status LED initialization failed!");
     } else {
         // Show yellow blinking during initialization
         statusLED.blinkYellow(200);
+    }
+
+    // Initialize motor control hardware
+    if (!motorControl.begin(&motorSettingsManager.get())) {
+        USBSerial.println("❌ Motor control initialization failed!");
+        // Critical error - flash red LED fast
+        statusLED.blinkRed(100);
+        // Don't halt, but indicate error state
+    } else {
+        USBSerial.println("✅ Motor control initialized successfully");
     }
 
     // ========== 步驟 2: 創建 FreeRTOS 資源（必須在 BLE 初始化之前！）==========
@@ -474,9 +483,14 @@ void setup() {
 
     // 檢查資源創建是否成功
     if (!hidDataQueue || !bleCommandQueue || !serialMutex || !bufferMutex || !hidSendMutex || !bleNotifyQueue) {
+        USBSerial.println("❌ CRITICAL ERROR: FreeRTOS resource creation failed!");
+        // Critical error - flash red LED fast and halt
+        statusLED.blinkRed(100);
+        statusLED.update();  // Update once to show the LED state
         // 如果資源創建失敗，進入無限迴圈（需要重啟）
         while (true) {
-            delay(1000);
+            statusLED.update();  // Keep LED blinking
+            delay(10);
         }
     }
 

@@ -11,13 +11,13 @@
  * Supports solid colors, blinking, and brightness control.
  *
  * Color Codes:
- * - Green (Solid):  System ready, motor idle
- * - Blue (Solid):   Motor running normally
- * - Yellow (Blink): Initialization in progress
- * - Red (Blink):    Error / Emergency stop
- * - Purple (Solid): BLE connected
- * - Cyan (Solid):   WiFi connected (future)
- * - Off:            System not initialized
+ * - Green (Solid):      System ready, motor idle
+ * - Blue (Solid):       Motor running normally
+ * - Yellow (Blink):     Initialization in progress OR Web server not ready
+ * - Red (Fast Blink):   CRITICAL ERROR - Emergency stop, Safety alert, Initialization failure (100ms)
+ * - Purple (Solid):     BLE connected
+ * - Cyan (Solid):       WiFi connected (future)
+ * - Off:                System not initialized
  *
  * Hardware:
  * - WS2812 RGB LED on GPIO 48
