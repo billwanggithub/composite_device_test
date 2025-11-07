@@ -10,6 +10,7 @@
 #include "WiFiSettings.h"
 #include "WiFiManager.h"
 #include "WebServer.h"
+#include "PeripheralManager.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -85,6 +86,9 @@ StatusLED statusLED;
 WiFiSettingsManager wifiSettingsManager;
 WiFiManager wifiManager;
 WebServerManager webServerManager;
+
+// Peripheral Manager instance
+PeripheralManager peripheralManager;
 
 // BLE Server Callbacks
 class MyServerCallbacks: public BLEServerCallbacks {
@@ -361,6 +365,20 @@ void wifiTask(void* parameter) {
     }
 }
 
+// Peripheral 處理 Task
+void peripheralTask(void* parameter) {
+    while (true) {
+        // Update all peripherals
+        // - User key debouncing and event detection
+        // - UART1 RPM measurement (if in PWM/RPM mode)
+        // - Motor control via keys
+        peripheralManager.update();
+
+        // Yield to other tasks (20ms loop rate for responsive key handling)
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+}
+
 // Motor 處理 Task
 void motorTask(void* parameter) {
     TickType_t lastRPMUpdate = 0;
@@ -488,6 +506,15 @@ void setup() {
         // Don't halt, but indicate error state
     } else {
         USBSerial.println("✅ Motor control initialized successfully");
+    }
+
+    // ========== 步驟 1.6: 初始化週邊管理器 ==========
+    USBSerial.println("");
+    if (!peripheralManager.begin(&motorControl)) {
+        USBSerial.println("❌ Peripheral manager initialization failed!");
+        // Non-critical - system can continue without peripherals
+    } else {
+        USBSerial.println("✅ Peripheral manager initialized successfully");
     }
 
     // ========== 步驟 2: 創建 FreeRTOS 資源（必須在 BLE 初始化之前！）==========
@@ -755,12 +782,23 @@ void setup() {
         1                  // Core 1
     );
 
+    xTaskCreatePinnedToCore(
+        peripheralTask,    // Task 函數
+        "Peripheral_Task", // Task 名稱
+        4096,              // Stack 大小
+        NULL,              // 參數
+        1,                 // 優先權（與 CDC 相同）
+        NULL,              // Task handle
+        1                  // Core 1
+    );
+
     USBSerial.println("[INFO] FreeRTOS Tasks 已啟動");
     USBSerial.println("[INFO] - HID Task (優先權 2)");
     USBSerial.println("[INFO] - CDC Task (優先權 1)");
     USBSerial.println("[INFO] - BLE Task (優先權 1)");
     USBSerial.println("[INFO] - Motor Task (優先權 1)");
     USBSerial.println("[INFO] - WiFi Task (優先權 1)");
+    USBSerial.println("[INFO] - Peripheral Task (優先權 1)");
 
     // LED state will be managed by motorTask based on actual system status
     // Don't set it here to avoid confusion
