@@ -409,11 +409,18 @@ void motorTask(void* parameter) {
             lastSafetyCheck = now;
         }
 
-        // Update LED based on system state every 1 second
-        if (now - lastLEDUpdate >= pdMS_TO_TICKS(1000)) {
-            // Priority 1: Check for error states (handled in safety check above with fast red blink)
-            // Priority 2: Web server not ready - blink orange/yellow as warning
-            if (!webServerManager.isRunning()) {
+        // Update LED based on system state every 200ms for faster response
+        if (now - lastLEDUpdate >= pdMS_TO_TICKS(200)) {
+            // Priority 1: Check for error states FIRST - don't overwrite error LED
+            bool safetyOK = motorControl.checkSafety();
+            bool watchdogOK = motorControl.checkWatchdog();
+
+            if (!safetyOK || !watchdogOK) {
+                // Keep fast red blink for errors (already set in safety check above)
+                // Don't change LED state here
+            }
+            // Priority 2: Web server not ready - blink yellow as warning
+            else if (!webServerManager.isRunning()) {
                 // Web server not ready - blink yellow to indicate waiting for web server
                 statusLED.blinkYellow(500);
             }
@@ -735,9 +742,10 @@ void setup() {
     USBSerial.println("[INFO] - Motor Task (優先權 1)");
     USBSerial.println("[INFO] - WiFi Task (優先權 1)");
 
-    // Set LED to green - system ready
-    statusLED.setGreen();
-    USBSerial.println("✅ System initialization complete - LED set to GREEN");
+    // LED state will be managed by motorTask based on actual system status
+    // Don't set it here to avoid confusion
+    USBSerial.println("✅ System initialization complete");
+    USBSerial.println("ℹ️ LED status will be updated by Motor Task based on system state");
 }
 
 void loop() {
