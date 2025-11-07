@@ -15,7 +15,7 @@ bool LEDPWMControl::begin(uint32_t frequency, float brightness) {
 
     // Configure LEDC timer for LED
     ledc_timer_config_t timer_conf = {
-        .speed_mode = LEDC_HIGH_SPEED_MODE,
+        .speed_mode = LEDC_LOW_SPEED_MODE,
         .duty_resolution = LEDC_TIMER_10_BIT,  // 10-bit resolution (0-1023)
         .timer_num = (ledc_timer_t)LEDC_TIMER_LED,
         .freq_hz = frequency,
@@ -31,7 +31,7 @@ bool LEDPWMControl::begin(uint32_t frequency, float brightness) {
     // Configure LEDC channel for LED
     ledc_channel_config_t channel_conf = {
         .gpio_num = PIN_LED_PWM,
-        .speed_mode = LEDC_HIGH_SPEED_MODE,
+        .speed_mode = LEDC_LOW_SPEED_MODE,
         .channel = (ledc_channel_t)LEDC_CHANNEL_LED,
         .intr_type = LEDC_INTR_DISABLE,
         .timer_sel = (ledc_timer_t)LEDC_TIMER_LED,
@@ -66,7 +66,7 @@ bool LEDPWMControl::setFrequency(uint32_t frequency) {
 
     // Update LEDC timer frequency
     ledc_timer_config_t timer_conf = {
-        .speed_mode = LEDC_HIGH_SPEED_MODE,
+        .speed_mode = LEDC_LOW_SPEED_MODE,
         .duty_resolution = LEDC_TIMER_10_BIT,
         .timer_num = (ledc_timer_t)LEDC_TIMER_LED,
         .freq_hz = frequency,
@@ -84,8 +84,8 @@ bool LEDPWMControl::setFrequency(uint32_t frequency) {
     // Re-apply brightness if LED is enabled
     if (ledEnabled) {
         uint32_t dutyValue = (uint32_t)((currentBrightness / 100.0) * 1023.0);
-        ledc_set_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_LED, dutyValue);
-        ledc_update_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_LED);
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_LED, dutyValue);
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_LED);
     }
 
     return true;
@@ -105,8 +105,8 @@ bool LEDPWMControl::setBrightness(float brightness) {
     // Apply brightness if LED is enabled
     if (ledEnabled) {
         uint32_t dutyValue = (uint32_t)((brightness / 100.0) * 1023.0);
-        ledc_set_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_LED, dutyValue);
-        ledc_update_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_LED);
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_LED, dutyValue);
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_LED);
     }
 
     return true;
@@ -122,12 +122,12 @@ void LEDPWMControl::enable(bool enabled) {
     if (enabled) {
         // Set duty cycle to current brightness
         uint32_t dutyValue = (uint32_t)((currentBrightness / 100.0) * 1023.0);
-        ledc_set_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_LED, dutyValue);
-        ledc_update_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_LED);
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_LED, dutyValue);
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_LED);
     } else {
         // Set duty cycle to 0 (off)
-        ledc_set_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_LED, 0);
-        ledc_update_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_LED);
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_LED, 0);
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_LED);
     }
 }
 

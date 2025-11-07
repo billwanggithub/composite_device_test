@@ -15,7 +15,7 @@ bool BuzzerControl::begin(uint32_t frequency, float duty) {
 
     // Configure LEDC timer for buzzer
     ledc_timer_config_t timer_conf = {
-        .speed_mode = LEDC_HIGH_SPEED_MODE,
+        .speed_mode = LEDC_LOW_SPEED_MODE,
         .duty_resolution = LEDC_TIMER_10_BIT,  // 10-bit resolution (0-1023)
         .timer_num = (ledc_timer_t)LEDC_TIMER_BUZZER,
         .freq_hz = frequency,
@@ -31,7 +31,7 @@ bool BuzzerControl::begin(uint32_t frequency, float duty) {
     // Configure LEDC channel for buzzer
     ledc_channel_config_t channel_conf = {
         .gpio_num = PIN_BUZZER_PWM,
-        .speed_mode = LEDC_HIGH_SPEED_MODE,
+        .speed_mode = LEDC_LOW_SPEED_MODE,
         .channel = (ledc_channel_t)LEDC_CHANNEL_BUZZER,
         .intr_type = LEDC_INTR_DISABLE,
         .timer_sel = (ledc_timer_t)LEDC_TIMER_BUZZER,
@@ -66,7 +66,7 @@ bool BuzzerControl::setFrequency(uint32_t frequency) {
 
     // Update LEDC timer frequency
     ledc_timer_config_t timer_conf = {
-        .speed_mode = LEDC_HIGH_SPEED_MODE,
+        .speed_mode = LEDC_LOW_SPEED_MODE,
         .duty_resolution = LEDC_TIMER_10_BIT,
         .timer_num = (ledc_timer_t)LEDC_TIMER_BUZZER,
         .freq_hz = frequency,
@@ -84,8 +84,8 @@ bool BuzzerControl::setFrequency(uint32_t frequency) {
     // Re-apply duty cycle if buzzer is enabled
     if (buzzerEnabled) {
         uint32_t dutyValue = (uint32_t)((currentDuty / 100.0) * 1023.0);
-        ledc_set_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_BUZZER, dutyValue);
-        ledc_update_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_BUZZER);
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_BUZZER, dutyValue);
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_BUZZER);
     }
 
     return true;
@@ -105,8 +105,8 @@ bool BuzzerControl::setDuty(float duty) {
     // Apply duty cycle if buzzer is enabled
     if (buzzerEnabled) {
         uint32_t dutyValue = (uint32_t)((duty / 100.0) * 1023.0);
-        ledc_set_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_BUZZER, dutyValue);
-        ledc_update_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_BUZZER);
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_BUZZER, dutyValue);
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_BUZZER);
     }
 
     return true;
@@ -122,12 +122,12 @@ void BuzzerControl::enable(bool enabled) {
     if (enabled) {
         // Set duty cycle to current value
         uint32_t dutyValue = (uint32_t)((currentDuty / 100.0) * 1023.0);
-        ledc_set_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_BUZZER, dutyValue);
-        ledc_update_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_BUZZER);
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_BUZZER, dutyValue);
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_BUZZER);
     } else {
         // Set duty cycle to 0 (silence)
-        ledc_set_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_BUZZER, 0);
-        ledc_update_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_BUZZER);
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_BUZZER, 0);
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_BUZZER);
     }
 }
 
