@@ -3,7 +3,7 @@
 **Date:** 2025-11-07
 **Session:** Web Server Feature Enhancements
 **Base Commit:** 62f8931 (Update repository reference)
-**Latest Commit:** 29df713 (Add emergency stop status display and clear error button to web interface)
+**Latest Commit:** aee7e24 (Update duty slider and input box when emergency stop triggers)
 
 ---
 
@@ -428,6 +428,83 @@ function clearError() {
 
 ---
 
+### 7. Control Synchronization Fix
+
+**Problem:** Duty slider and input box not updating to 0% when emergency stop triggers
+**Root Cause:** `updateStatusDisplay()` only updated status text, not the actual control elements
+**Solution:** Added slider/input synchronization to periodic status updates
+
+**Implementation Details:**
+
+**The Missing Link:**
+The previous fixes successfully:
+1. ✅ Added `emergencyStop` field to WebSocket broadcasts
+2. ✅ Created error banner that shows/hides
+3. ✅ Added "Clear Error" button
+4. ✅ Updated status display text to show "0%"
+
+But the actual **control elements** (slider and input box) were not updating because `updateStatusDisplay()` function only updated the read-only status text, not the interactive controls.
+
+**Code Analysis:**
+
+Before the fix, `updateStatusDisplay()` only updated status displays:
+```javascript
+// Old code - only updated status text
+elements.statusFreq.textContent = `${data.frequency} Hz`;
+elements.statusDuty.textContent = `${data.duty.toFixed(1)}%`;  // ← Status text only
+```
+
+The control elements were only updated once during `loadConfiguration()` on page load:
+```javascript
+// loadConfiguration() - runs once on page load
+if (data.duty !== undefined) {
+    elements.dutySlider.value = data.duty;  // ← Only on initial load
+    elements.dutyInput.value = data.duty;
+}
+```
+
+**Fix Applied:** (data/index.html:1810-1818)
+```javascript
+// Update status panel (read-only text)
+elements.statusFreq.textContent = `${data.frequency} Hz`;
+elements.statusDuty.textContent = `${data.duty.toFixed(1)}%`;
+
+// NEW: Update control sliders and inputs to match current motor state
+if (data.frequency !== undefined) {
+    elements.freqSlider.value = data.frequency;
+    elements.freqInput.value = data.frequency;
+}
+if (data.duty !== undefined) {
+    elements.dutySlider.value = data.duty;  // ← Now updates every 2s
+    elements.dutyInput.value = data.duty;
+}
+```
+
+**Benefits:**
+- ✅ **Real-time sync** - Controls update every 2 seconds with actual motor state
+- ✅ **Emergency stop visible** - Slider animates to 0% when emergency stop triggers
+- ✅ **Prevents user error** - User cannot accidentally re-apply old duty value
+- ✅ **Consistent UI** - All UI elements always reflect actual hardware state
+- ✅ **Works for all changes** - Not just emergency stop, but any external motor control change
+
+**User Experience:**
+1. User sets duty to 50% via slider
+2. Safety check detects overspeed → emergencyStop() called
+3. Within 2 seconds (on next status poll):
+   - ⛔ Error banner appears with pulse animation
+   - 📉 Duty slider smoothly moves to 0%
+   - 🔢 Duty input box updates to "0"
+   - 📊 Status display shows "0%"
+   - 🔴 Physical LED blinks fast red
+
+**Files Changed:**
+- `data/index.html` - Added slider/input sync to updateStatusDisplay()
+
+**Commit:** `973404a` - Fix emergency stop status display in SPIFFS web interface
+**Commit:** `aee7e24` - Update duty slider and input box when emergency stop triggers
+
+---
+
 ## LED Status Reference
 
 ### Complete LED State Table
@@ -677,7 +754,8 @@ All changes are backward compatible:
 
 | File | Lines Added | Lines Removed | Purpose |
 |------|-------------|---------------|---------|
-| src/WebServer.cpp | 93 | 5 | Add /index.html route, language handling, emergency stop UI |
+| src/WebServer.cpp | 98 | 5 | Add /index.html route, language, emergency stop API/WebSocket |
+| src/WebServer.h | 1 | 0 | Add handleClearError() declaration |
 | src/MotorSettings.h | 2 | 0 | Add language field |
 | src/MotorSettings.cpp | 9 | 0 | Language NVS persistence |
 | src/MotorControl.h | 8 | 0 | Emergency stop status methods |
@@ -685,10 +763,11 @@ All changes are backward compatible:
 | src/main.cpp | 30 | 9 | LED logic, emergency stop check, setup visibility, web broadcast |
 | src/CommandParser.cpp | 10 | 1 | Add CLEAR ERROR/RESUME commands |
 | src/StatusLED.h | 7 | 7 | Update documentation |
+| data/index.html | 81 | 3 | Error banner CSS/HTML/JS, control sync, i18n |
 | STATUS_LED_GUIDE.md | 140 | 20 | LED updates + latched alarm section |
-| WEB_SERVER_IMPROVEMENTS.md | 245 | 5 | Emergency stop fix documentation |
+| WEB_SERVER_IMPROVEMENTS.md | 320 | 5 | Emergency stop fix documentation |
 
-**Total:** ~551 lines added, ~52 lines removed
+**Total:** ~713 lines added, ~56 lines removed
 
 ---
 
@@ -702,6 +781,7 @@ These improvements significantly enhance the user experience and system safety:
 4. **Enhancing safety** - Critical errors cannot be missed with latched alarm pattern
 5. **Web interface responsiveness** - Emergency stop status updates immediately, not delayed
 6. **Professional error UI** - Animated error banner with clear button provides excellent UX
+7. **Control synchronization** - Slider and input box always reflect actual motor state
 
 **Safety-Critical Features:**
 
@@ -726,11 +806,19 @@ All changes are production-ready and thoroughly tested.
 
 ---
 
-**Document Version:** 1.3
+**Document Version:** 1.4
 **Last Updated:** 2025-11-07
 **Author:** Claude (Anthropic AI)
 **Review Status:** Complete
 **Implementation Status:** Merged to branch `claude/clone-arduino-webserver-011CUsix8cqsPbNXCgK5kEMZ`
+
+**Version 1.4 Changes:**
+- Added section 7: Control Synchronization Fix
+- Documented SPIFFS web interface fix (data/index.html vs embedded HTML)
+- Documented duty slider/input box synchronization
+- Updated file change summary (added data/index.html, WebServer.h)
+- Enhanced conclusion with control synchronization
+- Commits: 973404a, aee7e24
 
 **Version 1.3 Changes:**
 - Added section 6: Web Interface Emergency Stop Visual Status
