@@ -333,6 +333,33 @@ void bleTask(void* parameter) {
     }
 }
 
+// WiFi 處理 Task
+void wifiTask(void* parameter) {
+    TickType_t lastWiFiUpdate = 0;
+    TickType_t lastWebUpdate = 0;
+
+    while (true) {
+        TickType_t now = xTaskGetTickCount();
+
+        // Update WiFi status (check connection, handle reconnection)
+        if (now - lastWiFiUpdate >= pdMS_TO_TICKS(1000)) {  // Every 1 second
+            wifiManager.update();
+            lastWiFiUpdate = now;
+        }
+
+        // Update web server (WebSocket broadcasts, cleanup)
+        if (now - lastWebUpdate >= pdMS_TO_TICKS(200)) {  // Every 200ms (5 Hz)
+            if (webServerManager.isRunning()) {
+                webServerManager.update();
+            }
+            lastWebUpdate = now;
+        }
+
+        // Yield to other tasks
+        vTaskDelay(pdMS_TO_TICKS(50));  // 50ms loop rate
+    }
+}
+
 // Motor 處理 Task
 void motorTask(void* parameter) {
     TickType_t lastRPMUpdate = 0;
@@ -471,6 +498,9 @@ void setup() {
     USBSerial.println("  ✅ USB CDC 序列埠控制台");
     USBSerial.println("  ✅ USB HID 自訂協定 (64 bytes)");
     USBSerial.println("  ✅ BLE GATT 無線介面");
+    USBSerial.println("  ✅ WiFi Web 伺服器（AP/STA 模式）");
+    USBSerial.println("  ✅ WebSocket 即時 RPM 監控");
+    USBSerial.println("  ✅ REST API 馬達控制");
     USBSerial.println("  ✅ PWM 馬達控制 (MCPWM)");
     USBSerial.println("  ✅ 轉速計 RPM 量測");
     USBSerial.println("  ✅ FreeRTOS 多工架構");
@@ -488,7 +518,84 @@ void setup() {
     USBSerial.println("輸入 'HELP' 查看所有命令");
     USBSerial.println("=================================");
 
-    // ========== 步驟 6: 初始化 BLE（現在 mutex 已準備好）==========
+    // ========== 步驟 6: 初始化 WiFi 和 Web 伺服器 ==========
+    USBSerial.println("");
+    USBSerial.println("=== 初始化 WiFi 和 Web 伺服器 ===");
+
+    // Initialize WiFi settings
+    if (!wifiSettingsManager.begin()) {
+        USBSerial.println("⚠️ WiFi settings initialization failed, using defaults");
+    }
+
+    // Load WiFi settings from NVS
+    wifiSettingsManager.load();
+    const WiFiSettings& wifiSettings = wifiSettingsManager.get();
+
+    // Initialize WiFi manager
+    if (!wifiManager.begin(const_cast<WiFiSettings*>(&wifiSettings))) {
+        USBSerial.println("❌ WiFi manager initialization failed!");
+    } else {
+        USBSerial.println("✅ WiFi manager initialized");
+    }
+
+    // Initialize web server
+    if (!webServerManager.begin(
+        const_cast<WiFiSettings*>(&wifiSettings),
+        &motorControl,
+        &motorSettingsManager,
+        &wifiManager
+    )) {
+        USBSerial.println("❌ Web server initialization failed!");
+    } else {
+        USBSerial.println("✅ Web server initialized");
+    }
+
+    // Start WiFi if configured
+    if (wifiSettings.mode != WiFiMode::OFF) {
+        USBSerial.printf("🔧 啟動 WiFi 模式: ");
+        switch (wifiSettings.mode) {
+            case WiFiMode::AP:
+                USBSerial.println("Access Point");
+                break;
+            case WiFiMode::STA:
+                USBSerial.println("Station");
+                break;
+            case WiFiMode::AP_STA:
+                USBSerial.println("AP + Station");
+                break;
+            default:
+                USBSerial.println("Unknown");
+                break;
+        }
+
+        if (wifiManager.start()) {
+            USBSerial.println("✅ WiFi started successfully");
+
+            // Start web server if WiFi is connected
+            if (wifiManager.isConnected()) {
+                if (webServerManager.start()) {
+                    USBSerial.println("✅ Web server started successfully");
+                    USBSerial.println("");
+                    USBSerial.println("🌐 Web 介面資訊:");
+                    USBSerial.printf("  URL: http://%s/\n", wifiManager.getIPAddress().c_str());
+                    USBSerial.printf("  WebSocket: ws://%s/ws\n", wifiManager.getIPAddress().c_str());
+                    USBSerial.println("  可透過網頁控制馬達並即時查看 RPM");
+                } else {
+                    USBSerial.println("⚠️ Web server failed to start");
+                }
+            }
+        } else {
+            USBSerial.println("⚠️ WiFi failed to start");
+            USBSerial.println("  使用 'WIFI START' 命令手動啟動");
+        }
+    } else {
+        USBSerial.println("ℹ️ WiFi 模式: OFF (未啟動)");
+        USBSerial.println("  使用 'WIFI START' 命令啟動 WiFi");
+    }
+
+    USBSerial.println("=================================");
+
+    // ========== 步驟 7: 初始化 BLE（現在 mutex 已準備好）==========
     USBSerial.println("[INFO] 正在初始化 BLE...");
     BLEDevice::init("ESP32_S3_Console");
     pBLEServer = BLEDevice::createServer();
@@ -569,11 +676,22 @@ void setup() {
         1                  // Core 1
     );
 
+    xTaskCreatePinnedToCore(
+        wifiTask,          // Task 函數
+        "WiFi_Task",       // Task 名稱
+        8192,              // Stack 大小（較大，因為需要處理 WiFi 和 Web Server）
+        NULL,              // 參數
+        1,                 // 優先權（與 CDC 相同）
+        NULL,              // Task handle
+        1                  // Core 1
+    );
+
     USBSerial.println("[INFO] FreeRTOS Tasks 已啟動");
     USBSerial.println("[INFO] - HID Task (優先權 2)");
     USBSerial.println("[INFO] - CDC Task (優先權 1)");
     USBSerial.println("[INFO] - BLE Task (優先權 1)");
     USBSerial.println("[INFO] - Motor Task (優先權 1)");
+    USBSerial.println("[INFO] - WiFi Task (優先權 1)");
 
     // Set LED to green - system ready
     statusLED.setGreen();
