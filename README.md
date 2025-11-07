@@ -376,8 +376,8 @@ framework = arduino
 build_flags =
     -DARDUINO_USB_MODE=1
     -DARDUINO_USB_CDC_ON_BOOT=1
-    -DCONFIG_TINYUSB_HID_BUFSIZE=128
-    -DCFG_TUD_HID_EP_BUFSIZE=128
+  # Prefer SDK config values (set CONFIG_TINYUSB_HID_BUFSIZE in sdkconfig.defaults)
+  -DCFG_TUD_HID_EP_BUFSIZE=128
 monitor_speed = 115200
 ```
 
