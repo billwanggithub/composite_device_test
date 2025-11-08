@@ -42,14 +42,15 @@ void CommandParser::handleUART1Mode(const String& cmd, ICommandResponse* respons
 
 void CommandParser::handleUART1Config(const String& cmd, ICommandResponse* response) {
     // UART1 CONFIG <baud> [stop_bits] [parity]
-    // Parse parameters
-    int idx = cmd.indexOf(' ', 13);  // After "UART1 CONFIG "
-    if (idx == -1) {
+    // "UART1 CONFIG " is exactly 13 characters, params start at position 13
+    String params = cmd.substring(13);
+    params.trim();
+
+    if (params.length() == 0) {
         response->println("Usage: UART1 CONFIG <baud> [1|2] [N|E|O]");
         return;
     }
 
-    String params = cmd.substring(idx + 1);
     int baud = params.toInt();
 
     if (baud < 2400 || baud > 1500000) {
@@ -138,13 +139,15 @@ void CommandParser::handleUART1Status(ICommandResponse* response) {
 
 void CommandParser::handleUART1Write(const String& cmd, ICommandResponse* response) {
     // UART1 WRITE <text>
-    int idx = cmd.indexOf(' ', 12);  // After "UART1 WRITE "
-    if (idx == -1) {
+    // "UART1 WRITE " is exactly 12 characters, text starts at position 12
+    String text = cmd.substring(12);
+    text.trim();
+
+    if (text.length() == 0) {
         response->println("Usage: UART1 WRITE <text>");
         return;
     }
 
-    String text = cmd.substring(idx + 1);
     text += "\n";  // Add newline
 
     int written = peripheralManager.getUART1().write(text.c_str());
@@ -161,13 +164,16 @@ void CommandParser::handleUART1Write(const String& cmd, ICommandResponse* respon
 
 void CommandParser::handleUART2Config(const String& cmd, ICommandResponse* response) {
     // UART2 CONFIG <baud>
-    int idx = cmd.indexOf(' ', 13);
-    if (idx == -1) {
+    // "UART2 CONFIG " is exactly 13 characters, baud starts at position 13
+    String baudStr = cmd.substring(13);
+    baudStr.trim();
+
+    if (baudStr.length() == 0) {
         response->println("Usage: UART2 CONFIG <baud>");
         return;
     }
 
-    uint32_t baud = cmd.substring(idx + 1).toInt();
+    uint32_t baud = baudStr.toInt();
 
     if (baud < 2400 || baud > 1500000) {
         response->println("ERROR: Baud rate must be 2400-1500000");
@@ -193,13 +199,15 @@ void CommandParser::handleUART2Status(ICommandResponse* response) {
 
 void CommandParser::handleUART2Write(const String& cmd, ICommandResponse* response) {
     // UART2 WRITE <text>
-    int idx = cmd.indexOf(' ', 12);
-    if (idx == -1) {
+    // "UART2 WRITE " is exactly 12 characters, text starts at position 12
+    String text = cmd.substring(12);
+    text.trim();
+
+    if (text.length() == 0) {
         response->println("Usage: UART2 WRITE <text>");
         return;
     }
 
-    String text = cmd.substring(idx + 1);
     text += "\n";
 
     int written = peripheralManager.getUART2().write(text.c_str());
@@ -216,11 +224,8 @@ void CommandParser::handleUART2Write(const String& cmd, ICommandResponse* respon
 
 void CommandParser::handleBuzzerControl(const String& cmd, ICommandResponse* response) {
     // BUZZER <freq> <duty> [ON|OFF] or BUZZER ON/OFF
-    int idx = cmd.indexOf(' ', 7);  // After "BUZZER "
-    if (idx == -1) {
-        response->println("Usage: BUZZER <freq> <duty> [ON|OFF] | BUZZER ON | BUZZER OFF");
-        return;
-    }
+    // "BUZZER " is exactly 7 characters (positions 0-6), so params start at position 7
+    int idx = 6;  // Fixed: Position of space after "BUZZER"
 
     String param = cmd.substring(idx + 1);
     param.trim();
@@ -309,11 +314,8 @@ void CommandParser::handleBuzzerBeep(const String& cmd, ICommandResponse* respon
 
 void CommandParser::handleLEDPWM(const String& cmd, ICommandResponse* response) {
     // LED_PWM <freq> <brightness> [ON|OFF] or LED_PWM ON/OFF
-    int idx = cmd.indexOf(' ', 8);  // After "LED_PWM "
-    if (idx == -1) {
-        response->println("Usage: LED_PWM <freq> <brightness> [ON|OFF] | LED_PWM ON | LED_PWM OFF");
-        return;
-    }
+    // "LED_PWM " is exactly 8 characters (positions 0-7), so params start at position 8
+    int idx = 7;  // Fixed: Position of space after "LED_PWM"
 
     String param = cmd.substring(idx + 1);
     param.trim();
