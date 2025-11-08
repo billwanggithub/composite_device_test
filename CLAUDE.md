@@ -1149,6 +1149,62 @@ python scripts/ble_client.py --scan
 - **Our value (128) takes precedence** - this is correct
 - The warnings can be safely ignored
 
+### Command Parser indexOf Bug (FIXED in v2.5.0)
+
+**Symptoms:**
+- Commands with multiple parameters extract wrong values
+- Example: `UART1 PWM 1000 50 ON` parsed as freq=50, duty=0.0 instead of freq=1000, duty=50
+- Single parameter commands fail with "Usage" error even with valid input
+
+**Root Cause:**
+The `indexOf(' ', N)` pattern was incorrectly used where N pointed to the position AFTER the command name. This caused the search to skip the intended space and find the NEXT space, extracting wrong parameter substrings.
+
+**Example of the Bug:**
+```cpp
+// BUGGY CODE (fixed in v2.5.0):
+int idx1 = cmd.indexOf(' ', 10);  // "UART1 PWM " - searches FROM position 10
+
+// Command: "UART1 PWM 1000 50 ON"
+// Position:  0123456789012345678901
+//                   ^    ^  ^
+//                   10   14 17
+// indexOf(' ', 10) finds space at position 14 (wrong!)
+// Result: freq='50', duty='ON'=0.0 ❌
+```
+
+**Affected Commands (all fixed):**
+1. `UART1 PWM <freq> <duty> [ON|OFF]` - Commit `06a45ba`
+2. `BUZZER <freq> <duty> [ON|OFF]` - Commit `6f969ed`
+3. `LED_PWM <freq> <brightness> [ON|OFF]` - Commit `6f969ed`
+4. `UART1 CONFIG <baud>` - Commit `6f969ed`
+5. `UART1 WRITE <text>` - Commit `6f969ed`
+6. `UART2 CONFIG <baud>` - Commit `6f969ed`
+7. `UART2 WRITE <text>` - Commit `6f969ed`
+
+**The Fix:**
+```cpp
+// FIXED CODE (v2.5.0+):
+// "UART1 PWM " is exactly 10 characters (positions 0-9)
+int idx1 = 9;  // Fixed position of space after "PWM"
+
+// For commands with single parameter, use direct substring:
+String params = cmd.substring(13);  // "UART1 CONFIG " is 13 chars
+params.trim();
+```
+
+**How to Verify Fix:**
+```bash
+# Test all affected commands:
+UART1 PWM 1000 50 ON       # Should show: 1000 Hz, 50.0% duty ✓
+BUZZER 2000 50 ON          # Should show: 2000 Hz, 50.0% duty ✓
+LED_PWM 1000 50 ON         # Should show: 1000 Hz, 50.0% brightness ✓
+UART1 CONFIG 115200        # Should configure successfully ✓
+UART1 WRITE Hello World    # Should write text correctly ✓
+```
+
+**Version Check:**
+Run `INFO` command - firmware version should show `2.5.0-uart1-fix` with compile date Nov 9 2025 or later.
+
 ## Documentation
 
 📖 **For complete documentation navigation, see [DOCS_INDEX.md](DOCS_INDEX.md)** - A comprehensive guide to all project documentation.

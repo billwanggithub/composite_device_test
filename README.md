@@ -38,6 +38,31 @@
 - **週邊設定持久化**：所有週邊參數可儲存至 NVS
 - **命令延遲**：DELAY 命令支援腳本化控制序列
 
+## 🔧 重要修正（v2.5.0）
+
+**命令解析器 indexOf 錯誤已修正**
+
+在版本 2.5.0 中修正了影響 7 個週邊命令的關鍵解析錯誤：
+
+**問題症狀：**
+- `UART1 PWM 1000 50 ON` 被錯誤解析為 freq=50, duty=0.0（應為 1000, 50.0）
+- `BUZZER 2000 50 ON` 被錯誤解析為 freq=50, duty=0.0（應為 2000, 50.0）
+- `LED_PWM 1000 50 ON` 被錯誤解析為 freq=50, brightness=0.0（應為 1000, 50.0）
+
+**已修正的命令：**
+1. ✅ UART1 PWM
+2. ✅ BUZZER
+3. ✅ LED_PWM
+4. ✅ UART1 CONFIG
+5. ✅ UART1 WRITE
+6. ✅ UART2 CONFIG
+7. ✅ UART2 WRITE
+
+**如何驗證修正：**
+執行 `INFO` 命令，確認韌體版本為 `2.5.0-uart1-fix`，編譯時間為 2025-11-09 或更新。
+
+詳細技術說明請參閱 [CLAUDE.md § Command Parser indexOf Bug](CLAUDE.md#command-parser-indexof-bug-fixed-in-v250)
+
 ## 📚 語言說明 / Language Notes
 
 本專案採用雙語文件策略：
