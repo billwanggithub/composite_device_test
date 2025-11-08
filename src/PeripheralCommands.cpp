@@ -70,35 +70,52 @@ void CommandParser::handleUART1Config(const String& cmd, ICommandResponse* respo
 
 void CommandParser::handleUART1PWM(const String& cmd, ICommandResponse* response) {
     // UART1 PWM <freq> <duty> [ON|OFF]
+    // Debug: Print received command
+    response->printf("[DEBUG] Received command: '%s'\n", cmd.c_str());
+
     int idx1 = cmd.indexOf(' ', 10);  // After "UART1 PWM "
+    response->printf("[DEBUG] idx1=%d\n", idx1);
     if (idx1 == -1) {
         response->println("Usage: UART1 PWM <freq> <duty> [ON|OFF]");
         return;
     }
 
     int idx2 = cmd.indexOf(' ', idx1 + 1);
+    response->printf("[DEBUG] idx2=%d\n", idx2);
     if (idx2 == -1) {
         response->println("Usage: UART1 PWM <freq> <duty> [ON|OFF]");
         return;
     }
 
     // Parse frequency and duty
-    uint32_t freq = cmd.substring(idx1 + 1, idx2).toInt();
+    String freqStr = cmd.substring(idx1 + 1, idx2);
+    response->printf("[DEBUG] freqStr='%s'\n", freqStr.c_str());
+    uint32_t freq = freqStr.toInt();
+    response->printf("[DEBUG] freq=%u\n", freq);
 
     // Check if there's an optional ON/OFF parameter
     String dutyStr = cmd.substring(idx2 + 1);
+    response->printf("[DEBUG] dutyStr (before trim)='%s'\n", dutyStr.c_str());
     dutyStr.trim();
+    response->printf("[DEBUG] dutyStr (after trim)='%s'\n", dutyStr.c_str());
     int idx3 = dutyStr.indexOf(' ');
+    response->printf("[DEBUG] idx3=%d\n", idx3);
 
     float duty;
     bool enablePWM = true;  // Default to enabled
 
     if (idx3 != -1) {
         // Has ON/OFF parameter
-        duty = dutyStr.substring(0, idx3).toFloat();
+        String dutyNumStr = dutyStr.substring(0, idx3);
+        response->printf("[DEBUG] dutyNumStr='%s'\n", dutyNumStr.c_str());
+        duty = dutyNumStr.toFloat();
+        response->printf("[DEBUG] duty=%.1f\n", duty);
+
         String enableStr = dutyStr.substring(idx3 + 1);
+        response->printf("[DEBUG] enableStr (before trim)='%s'\n", enableStr.c_str());
         enableStr.trim();
         enableStr.toUpperCase();
+        response->printf("[DEBUG] enableStr (final)='%s'\n", enableStr.c_str());
 
         if (enableStr == "ON") {
             enablePWM = true;
@@ -108,6 +125,7 @@ void CommandParser::handleUART1PWM(const String& cmd, ICommandResponse* response
     } else {
         // No ON/OFF parameter, just duty
         duty = dutyStr.toFloat();
+        response->printf("[DEBUG] duty (no ON/OFF)=%.1f\n", duty);
     }
 
     if (peripheralManager.getUART1().setPWMFrequency(freq) &&
