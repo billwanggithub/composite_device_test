@@ -23,7 +23,7 @@
 // ============================================================================
 // UART1 - Multiplexable between UART and PWM/RPM modes
 #define PIN_UART1_TX                17  // UART1 TX / LEDC PWM (1Hz-500kHz)
-#define PIN_UART1_RX                18  // UART1 RX / PCNT (RPM capture, up to 20kHz)
+#define PIN_UART1_RX                18  // UART1 RX / MCPWM Capture (RPM measurement, 1Hz-500kHz)
 
 // UART2 - Standard UART (avoids GPIO36/37)
 #define PIN_UART2_TX                43  // UART2 TX (2400-1.5Mbps)
@@ -69,8 +69,11 @@
 #define LEDC_TIMER_LED              1   // High-speed timer for LED
 #define LEDC_TIMER_UART1_PWM        2   // High-speed timer for UART1 PWM
 
-// PCNT Unit for UART1 RPM measurement
-#define PCNT_UNIT_UART1_RPM         PCNT_UNIT_0
+// MCPWM Capture for UART1 RPM measurement
+// Note: MCPWM_UNIT_0 CAP0 is used by Motor Tachometer (GPIO 11)
+//       UART1 uses MCPWM_UNIT_0 CAP1 (GPIO 18)
+#define MCPWM_UNIT_UART1_RPM        MCPWM_UNIT_0
+#define MCPWM_CAP_UART1_RPM         MCPWM_SELECT_CAP1
 
 // UART Numbers
 #define UART_NUM_UART1              UART_NUM_1

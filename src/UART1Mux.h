@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include "driver/uart.h"
 #include "driver/ledc.h"
-#include "driver/pcnt.h"
+#include "driver/mcpwm.h"
 #include "PeripheralPins.h"
 
 /**
@@ -12,7 +12,7 @@
  *
  * Manages UART1 with three operating modes:
  * 1. UART Mode: Normal UART communication (TX with pull-up, RX standard)
- * 2. PWM Mode: TX outputs PWM (1Hz-500kHz), RX inputs RPM signal (up to 20kHz)
+ * 2. PWM Mode: TX outputs PWM (1Hz-500kHz), RX measures frequency via MCPWM Capture (1Hz-500kHz)
  * 3. Disabled: Pins released
  *
  * Mode switching sequence:
@@ -23,7 +23,7 @@
  *
  * Hardware:
  * - GPIO 17: UART1 TX / LEDC PWM output
- * - GPIO 18: UART1 RX / PCNT frequency counter
+ * - GPIO 18: UART1 RX / MCPWM Capture (frequency measurement)
  *
  * Usage:
  *   UART1Mux uart1;
@@ -82,7 +82,7 @@ public:
      * @return true if mode switch successful
      *
      * TX: LEDC PWM output (1Hz-500kHz)
-     * RX: PCNT frequency counter (up to 20kHz)
+     * RX: MCPWM Capture frequency measurement (1Hz-500kHz, high precision)
      */
     bool setModePWM_RPM();
 
@@ -202,8 +202,9 @@ public:
     /**
      * @brief Update RPM frequency measurement (MODE_PWM_RPM only)
      *
-     * Should be called periodically (e.g., every 100ms) to update frequency reading.
-     * Uses 100ms measurement window for accuracy.
+     * Should be called periodically to update frequency reading from MCPWM Capture.
+     * Frequency is calculated from captured period between rising edges.
+     * Formula: frequency = 80,000,000 / capture_period
      */
     void updateRPMFrequency();
 
@@ -260,11 +261,18 @@ private:
     float pwmDuty = 50.0;              // Default 50%
     bool pwmEnabled = false;
 
-    // RPM measurement state
-    float rpmFrequency = 0.0;          // Measured frequency in Hz
-    unsigned long lastRPMUpdate = 0;   // Last RPM update time
-    int16_t lastPCNTCount = 0;         // Last PCNT counter value
-    unsigned long rpmMeasureStartTime = 0;  // Measurement window start
+    // RPM measurement state (MCPWM Capture)
+    float rpmFrequency = 0.0;              // Measured frequency in Hz
+    unsigned long lastRPMUpdate = 0;       // Last valid capture time
+    static volatile uint32_t capturePeriod;        // Period between captures (in timer ticks)
+    static volatile bool newCaptureAvailable;      // New capture data flag
+    static volatile unsigned long lastCaptureTime; // Timestamp of last capture
+
+    // Static callback function for MCPWM Capture ISR
+    static bool IRAM_ATTR captureCallback(mcpwm_unit_t mcpwm,
+                                          mcpwm_capture_channel_id_t cap_channel,
+                                          const cap_event_data_t *edata,
+                                          void *user_data);
 
     // Helper functions
     bool initUART();

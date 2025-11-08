@@ -1,5 +1,11 @@
 #include "UART1Mux.h"
 #include "driver/gpio.h"
+#include "soc/mcpwm_periph.h"
+
+// Define static variables for MCPWM Capture
+volatile uint32_t UART1Mux::capturePeriod = 0;
+volatile bool UART1Mux::newCaptureAvailable = false;
+volatile unsigned long UART1Mux::lastCaptureTime = 0;
 
 UART1Mux::UART1Mux() {
 }
@@ -278,33 +284,58 @@ void UART1Mux::setPWMEnabled(bool enable) {
     }
 }
 
+// ============================================================================
+// MCPWM Capture ISR Callback
+// ============================================================================
+
+bool IRAM_ATTR UART1Mux::captureCallback(mcpwm_unit_t mcpwm,
+                                          mcpwm_capture_channel_id_t cap_channel,
+                                          const cap_event_data_t *edata,
+                                          void *user_data) {
+    // This runs in ISR context - must be fast!
+    static uint32_t lastCapture = 0;
+    uint32_t currentCapture = edata->cap_value;
+
+    if (lastCapture != 0) {
+        // Calculate period between captures (in timer ticks)
+        if (currentCapture > lastCapture) {
+            capturePeriod = currentCapture - lastCapture;
+        } else {
+            // Handle timer overflow (32-bit counter)
+            capturePeriod = (UINT32_MAX - lastCapture) + currentCapture + 1;
+        }
+        newCaptureAvailable = true;
+    }
+
+    lastCapture = currentCapture;
+    lastCaptureTime = millis();  // Track last valid capture time
+
+    return false;  // Don't wake higher priority task
+}
+
 void UART1Mux::updateRPMFrequency() {
     if (currentMode != MODE_PWM_RPM) {
         rpmFrequency = 0.0;
         return;
     }
 
+    // Check if new capture data is available
+    if (newCaptureAvailable) {
+        newCaptureAvailable = false;
+
+        // Calculate frequency from captured period
+        // Formula: frequency = MCPWM_CAPTURE_CLK / period
+        // MCPWM_CAPTURE_CLK = 80,000,000 Hz (80 MHz APB clock)
+        if (capturePeriod > 0) {
+            rpmFrequency = 80000000.0 / (float)capturePeriod;
+            lastRPMUpdate = lastCaptureTime;
+        }
+    }
+
+    // Check for signal timeout (no capture in last 500ms)
     unsigned long now = millis();
-    unsigned long elapsed = now - rpmMeasureStartTime;
-
-    // Measurement window: 100ms
-    if (elapsed >= 100) {
-        // Read PCNT counter value
-        int16_t count = 0;
-        pcnt_get_counter_value(PCNT_UNIT_UART1_RPM, &count);
-
-        // Calculate frequency (Hz)
-        // count = pulses in 100ms
-        // frequency = count * 10
-        rpmFrequency = (float)abs(count) * 10.0;
-
-        // Reset counter for next measurement
-        pcnt_counter_clear(PCNT_UNIT_UART1_RPM);
-
-        // Update timing
-        rpmMeasureStartTime = now;
-        lastRPMUpdate = now;
-        lastPCNTCount = count;
+    if ((now - lastRPMUpdate) > 500) {
+        rpmFrequency = 0.0;  // Signal lost
     }
 }
 
@@ -407,41 +438,37 @@ bool UART1Mux::initPWM() {
 }
 
 bool UART1Mux::initRPM() {
-    // Configure PCNT unit
-    pcnt_config_t pcnt_config = {
-        .pulse_gpio_num = PIN_UART1_RX,
-        .ctrl_gpio_num = PCNT_PIN_NOT_USED,
-        .lctrl_mode = PCNT_MODE_KEEP,
-        .hctrl_mode = PCNT_MODE_KEEP,
-        .pos_mode = PCNT_COUNT_INC,      // Count on rising edge
-        .neg_mode = PCNT_COUNT_DIS,      // Don't count on falling edge
-        .counter_h_lim = 32767,
-        .counter_l_lim = -32768,
-        .unit = PCNT_UNIT_UART1_RPM,
-        .channel = PCNT_CHANNEL_0,
-    };
+    // Initialize MCPWM Capture for frequency measurement
+    // Step 1: Configure GPIO for MCPWM Capture
+    mcpwm_gpio_init(MCPWM_UNIT_UART1_RPM, MCPWM_CAP_UART1_RPM, PIN_UART1_RX);
 
-    esp_err_t err = pcnt_unit_config(&pcnt_config);
-    if (err != ESP_OK) {
-        Serial.printf("[UART1] PCNT config failed: %d\n", err);
-        return false;
+    // Step 2: Configure capture parameters
+    mcpwm_capture_config_t cap_conf;
+    cap_conf.cap_edge = MCPWM_POS_EDGE;        // Capture on rising edge
+    cap_conf.cap_prescale = 1;                  // No prescaling (80 MHz)
+    cap_conf.capture_cb = captureCallback;      // ISR callback
+    cap_conf.user_data = nullptr;               // No user data needed
+
+    // Step 3: Enable capture channel
+    esp_err_t result = mcpwm_capture_enable_channel(MCPWM_UNIT_UART1_RPM,
+                                                     MCPWM_CAP_UART1_RPM,
+                                                     &cap_conf);
+
+    if (result == ESP_OK) {
+        // Initialize state variables
+        capturePeriod = 0;
+        newCaptureAvailable = false;
+        lastCaptureTime = millis();
+        lastRPMUpdate = millis();
+        rpmFrequency = 0.0;
+
+        Serial.printf("[UART1] ✅ MCPWM Capture initialized (GPIO %d, rising edge, 80 MHz)\n",
+                     PIN_UART1_RX);
+        return true;
     }
 
-    // Set PCNT filter (13ns * 1023 ≈ 13us, filters glitches < 77kHz)
-    pcnt_set_filter_value(PCNT_UNIT_UART1_RPM, 1023);
-    pcnt_filter_enable(PCNT_UNIT_UART1_RPM);
-
-    // Initialize counter
-    pcnt_counter_pause(PCNT_UNIT_UART1_RPM);
-    pcnt_counter_clear(PCNT_UNIT_UART1_RPM);
-    pcnt_counter_resume(PCNT_UNIT_UART1_RPM);
-
-    // Initialize timing
-    rpmMeasureStartTime = millis();
-    lastRPMUpdate = millis();
-    rpmFrequency = 0.0;
-
-    return true;
+    Serial.printf("[UART1] ❌ MCPWM Capture init failed: %s\n", esp_err_to_name(result));
+    return false;
 }
 
 void UART1Mux::deinitUART() {
@@ -454,8 +481,13 @@ void UART1Mux::deinitPWM() {
 }
 
 void UART1Mux::deinitRPM() {
-    pcnt_counter_pause(PCNT_UNIT_UART1_RPM);
-    pcnt_counter_clear(PCNT_UNIT_UART1_RPM);
+    // Disable MCPWM Capture channel
+    mcpwm_capture_disable_channel(MCPWM_UNIT_UART1_RPM, MCPWM_CAP_UART1_RPM);
+
+    // Reset state variables
+    capturePeriod = 0;
+    newCaptureAvailable = false;
+    rpmFrequency = 0.0;
 }
 
 void UART1Mux::releasePins() {
