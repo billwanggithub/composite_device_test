@@ -266,3 +266,140 @@ void PeripheralManager::adjustMotorFrequency(bool increase) {
         Serial.printf("[Keys] Frequency adjusted: %u Hz → %u Hz\n", currentFreq, (uint32_t)newFreq);
     }
 }
+
+// ============================================================================
+// Settings Management Implementation
+// ============================================================================
+
+bool PeripheralManager::beginSettings() {
+    if (!settingsManager.begin()) {
+        Serial.println("[PeripheralManager] Failed to initialize settings manager");
+        return false;
+    }
+    Serial.println("[PeripheralManager] Settings manager initialized");
+    return true;
+}
+
+bool PeripheralManager::loadSettings() {
+    if (!settingsManager.load()) {
+        Serial.println("[PeripheralManager] Failed to load settings");
+        return false;
+    }
+
+    Serial.println("[PeripheralManager] Settings loaded successfully");
+    return true;
+}
+
+bool PeripheralManager::saveSettings() {
+    // Capture current peripheral states into settings
+    PeripheralSettings& settings = settingsManager.get();
+
+    // UART1 state
+    switch (uart1.getMode()) {
+        case UART1Mux::MODE_DISABLED:
+            settings.uart1Mode = 0;
+            break;
+        case UART1Mux::MODE_UART:
+            settings.uart1Mode = 1;
+            settings.uart1Baud = uart1.getUARTBaudRate();
+            break;
+        case UART1Mux::MODE_PWM_RPM:
+            settings.uart1Mode = 2;
+            settings.uart1PwmFreq = uart1.getPWMFrequency();
+            settings.uart1PwmDuty = uart1.getPWMDuty();
+            settings.uart1PwmEnabled = uart1.isPWMEnabled();
+            break;
+    }
+
+    // UART2 state
+    settings.uart2Baud = uart2.getBaudRate();
+
+    // Buzzer state
+    settings.buzzerFreq = buzzer.getFrequency();
+    settings.buzzerDuty = buzzer.getDuty();
+    settings.buzzerEnabled = buzzer.isEnabled();
+
+    // LED PWM state
+    settings.ledPwmFreq = ledPWM.getFrequency();
+    settings.ledBrightness = ledPWM.getBrightness();
+    settings.ledEnabled = ledPWM.isEnabled();
+
+    // Relay state
+    settings.relayState = relay.getState();
+
+    // GPIO state
+    settings.gpioState = gpioOut.getState();
+
+    // Key control settings
+    settings.keyControlAdjustDuty = keyControlAdjustsDuty;
+    settings.keyDutyStep = dutyStepSize;
+    settings.keyFreqStep = frequencyStepSize;
+    settings.keyControlEnabled = keyControlEnabled;
+
+    // Save to NVS
+    if (!settingsManager.save()) {
+        Serial.println("[PeripheralManager] Failed to save settings");
+        return false;
+    }
+
+    Serial.println("[PeripheralManager] Settings saved successfully");
+    return true;
+}
+
+bool PeripheralManager::applySettings() {
+    const PeripheralSettings& settings = settingsManager.get();
+
+    Serial.println("[PeripheralManager] Applying settings to peripherals...");
+
+    // UART1 mode is NOT applied from NVS settings
+    // It always defaults to PWM/RPM mode at startup (set in main.cpp)
+    // and can only be changed via commands (UART1 MODE <UART|PWM|OFF>)
+    // This ensures UART1 always starts in PWM/RPM mode regardless of saved settings
+    Serial.println("[PeripheralManager] UART1: Mode not applied (uses startup default PWM/RPM)");
+
+    // Apply Buzzer settings
+    buzzer.setFrequency(settings.buzzerFreq);
+    buzzer.setDuty(settings.buzzerDuty);
+    buzzer.enable(settings.buzzerEnabled);
+    Serial.printf("[PeripheralManager] Buzzer: %u Hz, %.1f%%, %s\n",
+        settings.buzzerFreq, settings.buzzerDuty,
+        settings.buzzerEnabled ? "enabled" : "disabled");
+
+    // Apply LED PWM settings
+    ledPWM.setFrequency(settings.ledPwmFreq);
+    ledPWM.setBrightness(settings.ledBrightness);
+    ledPWM.enable(settings.ledEnabled);
+    Serial.printf("[PeripheralManager] LED PWM: %u Hz, %.1f%%, %s\n",
+        settings.ledPwmFreq, settings.ledBrightness,
+        settings.ledEnabled ? "enabled" : "disabled");
+
+    // Apply Relay settings
+    relay.setState(settings.relayState);
+    Serial.printf("[PeripheralManager] Relay: %s\n", settings.relayState ? "ON" : "OFF");
+
+    // Apply GPIO settings
+    if (settings.gpioState) {
+        gpioOut.setHigh();
+    } else {
+        gpioOut.setLow();
+    }
+    Serial.printf("[PeripheralManager] GPIO: %s\n", settings.gpioState ? "HIGH" : "LOW");
+
+    // Apply key control settings
+    keyControlAdjustsDuty = settings.keyControlAdjustDuty;
+    dutyStepSize = settings.keyDutyStep;
+    frequencyStepSize = settings.keyFreqStep;
+    keyControlEnabled = settings.keyControlEnabled;
+    Serial.printf("[PeripheralManager] Key Control: %s mode, duty step=%.1f%%, freq step=%u Hz, %s\n",
+        settings.keyControlAdjustDuty ? "duty" : "frequency",
+        settings.keyDutyStep, settings.keyFreqStep,
+        settings.keyControlEnabled ? "enabled" : "disabled");
+
+    Serial.println("[PeripheralManager] All settings applied successfully");
+    return true;
+}
+
+void PeripheralManager::resetSettings() {
+    settingsManager.reset();
+    Serial.println("[PeripheralManager] Settings reset to defaults");
+}

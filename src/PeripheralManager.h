@@ -10,6 +10,7 @@
 #include "RelayControl.h"
 #include "GPIOControl.h"
 #include "MotorControl.h"
+#include "PeripheralSettings.h"
 
 /**
  * @brief Peripheral Manager - Centralized peripheral control
@@ -132,6 +133,45 @@ public:
      */
     bool isInitialized() const { return allInitialized; }
 
+    // ========================================================================
+    // Settings Management
+    // ========================================================================
+
+    /**
+     * @brief Initialize settings manager
+     * @return true if successful
+     */
+    bool beginSettings();
+
+    /**
+     * @brief Load settings from NVS
+     * @return true if successful
+     */
+    bool loadSettings();
+
+    /**
+     * @brief Save current peripheral states to NVS
+     * @return true if successful
+     */
+    bool saveSettings();
+
+    /**
+     * @brief Apply loaded settings to all peripherals
+     * @return true if successful
+     */
+    bool applySettings();
+
+    /**
+     * @brief Reset all settings to factory defaults
+     */
+    void resetSettings();
+
+    /**
+     * @brief Get reference to settings manager
+     * @return Reference to settings manager
+     */
+    PeripheralSettingsManager& getSettingsManager() { return settingsManager; }
+
 private:
     // Peripheral instances
     UART1Mux uart1;
@@ -144,6 +184,9 @@ private:
 
     // Motor control reference (for key control)
     MotorControl* pMotorControl = nullptr;
+
+    // Settings manager
+    PeripheralSettingsManager settingsManager;
 
     // Initialization state
     bool allInitialized = false;

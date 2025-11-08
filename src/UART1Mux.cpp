@@ -219,7 +219,7 @@ bool UART1Mux::setPWMFrequency(uint32_t frequency) {
 
     // Configure LEDC timer frequency
     ledc_timer_config_t timer_conf = {
-        .speed_mode = LEDC_HIGH_SPEED_MODE,
+        .speed_mode = LEDC_LOW_SPEED_MODE,
         .duty_resolution = LEDC_TIMER_13_BIT,  // 13-bit resolution (0-8191)
         .timer_num = (ledc_timer_t)LEDC_TIMER_UART1_PWM,
         .freq_hz = frequency,
@@ -236,8 +236,8 @@ bool UART1Mux::setPWMFrequency(uint32_t frequency) {
 
     // Re-apply duty cycle
     uint32_t dutyValue = (uint32_t)((pwmDuty / 100.0) * 8191.0);
-    ledc_set_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_UART1_PWM, dutyValue);
-    ledc_update_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_UART1_PWM);
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_UART1_PWM, dutyValue);
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_UART1_PWM);
 
     return true;
 }
@@ -256,8 +256,8 @@ bool UART1Mux::setPWMDuty(float duty) {
     // Calculate duty value (13-bit: 0-8191)
     uint32_t dutyValue = (uint32_t)((duty / 100.0) * 8191.0);
 
-    ledc_set_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_UART1_PWM, dutyValue);
-    ledc_update_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_UART1_PWM);
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_UART1_PWM, dutyValue);
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_UART1_PWM);
 
     return true;
 }
@@ -271,10 +271,10 @@ void UART1Mux::setPWMEnabled(bool enable) {
 
     if (enable) {
         // Resume PWM
-        ledc_timer_resume(LEDC_HIGH_SPEED_MODE, (ledc_timer_t)LEDC_TIMER_UART1_PWM);
+        ledc_timer_resume(LEDC_LOW_SPEED_MODE, (ledc_timer_t)LEDC_TIMER_UART1_PWM);
     } else {
         // Pause PWM
-        ledc_timer_pause(LEDC_HIGH_SPEED_MODE, (ledc_timer_t)LEDC_TIMER_UART1_PWM);
+        ledc_timer_pause(LEDC_LOW_SPEED_MODE, (ledc_timer_t)LEDC_TIMER_UART1_PWM);
     }
 }
 
@@ -374,7 +374,7 @@ bool UART1Mux::initUART() {
 bool UART1Mux::initPWM() {
     // Configure LEDC timer
     ledc_timer_config_t timer_conf = {
-        .speed_mode = LEDC_HIGH_SPEED_MODE,
+        .speed_mode = LEDC_LOW_SPEED_MODE,
         .duty_resolution = LEDC_TIMER_13_BIT,
         .timer_num = (ledc_timer_t)LEDC_TIMER_UART1_PWM,
         .freq_hz = pwmFrequency,
@@ -389,7 +389,7 @@ bool UART1Mux::initPWM() {
     // Configure LEDC channel
     ledc_channel_config_t channel_conf = {
         .gpio_num = PIN_UART1_TX,
-        .speed_mode = LEDC_HIGH_SPEED_MODE,
+        .speed_mode = LEDC_LOW_SPEED_MODE,
         .channel = (ledc_channel_t)LEDC_CHANNEL_UART1_PWM,
         .intr_type = LEDC_INTR_DISABLE,
         .timer_sel = (ledc_timer_t)LEDC_TIMER_UART1_PWM,
@@ -449,7 +449,7 @@ void UART1Mux::deinitUART() {
 }
 
 void UART1Mux::deinitPWM() {
-    ledc_stop(LEDC_HIGH_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_UART1_PWM, 0);
+    ledc_stop(LEDC_LOW_SPEED_MODE, (ledc_channel_t)LEDC_CHANNEL_UART1_PWM, 0);
     pwmEnabled = false;
 }
 

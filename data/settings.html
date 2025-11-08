@@ -336,6 +336,10 @@
                     <span class="lang-zh-CN">主控制台</span>
                     <span class="lang-en">Dashboard</span>
                 </a>
+                <a href="/peripherals.html" class="nav-link">
+                    <span class="lang-zh-CN">⚙️ 外设控制</span>
+                    <span class="lang-en">⚙️ Peripherals</span>
+                </a>
                 <a href="/settings.html" class="nav-link active">
                     <span class="lang-zh-CN">系統設置</span>
                     <span class="lang-en">Settings</span>
@@ -700,7 +704,14 @@
                 document.getElementById('ledBrightness').value = data.ledBrightness || 25;
                 document.getElementById('ledBrightnessValue').textContent = data.ledBrightness || 25;
                 document.getElementById('wifiSSID').value = data.wifiSSID || '';
-                document.getElementById('wifiPassword').value = data.wifiPassword || '';
+                // Don't clear password field if server returns empty (for security)
+                // Keep existing value or show placeholder
+                if (data.wifiPassword) {
+                    document.getElementById('wifiPassword').value = data.wifiPassword;
+                } else if (data.wifiSSID) {
+                    // If SSID exists but password is empty (security), show placeholder
+                    document.getElementById('wifiPassword').placeholder = '(已保存 / Saved)';
+                }
 
                 // 載入 AP 模式設定
                 const apResponse = await fetch('/api/ap-mode');
@@ -738,8 +749,14 @@
                 updateIfNotFocused('maxSafeRPM', data.maxSafeRPM || 500000);
                 updateIfNotFocused('polePairs', data.polePairs || 2);
                 updateIfNotFocused('rpmUpdateRate', data.rpmUpdateRate || 100);
-                updateIfNotFocused('wifiSSID', data.wifiSSID);
-                updateIfNotFocused('wifiPassword', data.wifiPassword);
+                // Don't update SSID if server returns empty (keeps user input)
+                if (data.wifiSSID) {
+                    updateIfNotFocused('wifiSSID', data.wifiSSID);
+                }
+                // Don't update password field if server returns empty (for security)
+                if (data.wifiPassword) {
+                    updateIfNotFocused('wifiPassword', data.wifiPassword);
+                }
 
                 // LED brightness 特殊處理（同時更新滑桿和顯示值）
                 const ledBrightnessEl = document.getElementById('ledBrightness');

@@ -331,7 +331,9 @@ INFO
 
 ## 測試命令列表
 
-所有測試腳本支援以下命令：
+### 基本測試命令
+
+所有測試腳本支援以下基本命令：
 
 | 命令 | 描述 | 預期回應 | 備註 |
 |------|------|---------|------|
@@ -342,6 +344,39 @@ INFO
 | `SEND` | 發送測試 HID IN report | 確認訊息 | 發送 0x00-0x3F 序列 |
 | `READ` | 讀取 HID OUT buffer | Hex dump (64 bytes) | 顯示緩衝區內容 |
 | `CLEAR` | 清除 HID OUT buffer | 確認訊息 | 清空緩衝區 |
+| `DELAY <ms>` | 延遲指定毫秒數 | 延遲確認訊息 | 範圍 1-60000ms |
+
+### 馬達和週邊控制命令
+
+系統還支援完整的馬達控制和週邊控制命令：
+
+**馬達控制範例：**
+- `SET PWM_FREQ <Hz>` - 設定 PWM 頻率（10-500000 Hz）
+- `SET PWM_DUTY <%>` - 設定 PWM 佔空比（0-100%）
+- `RPM` - 讀取轉速計 RPM 值
+- `MOTOR STATUS` - 顯示馬達狀態
+- `MOTOR STOP` - 緊急停止
+
+**週邊控制範例：**
+- `UART1 MODE <UART|PWM|OFF>` - 切換 UART1 模式
+- `UART1 PWM <freq> <duty> [ON|OFF]` - 設定 UART1 PWM 參數
+- `BUZZER <freq> <duty> [ON|OFF]` - 控制蜂鳴器
+- `LED_PWM <freq> <brightness> [ON|OFF]` - 控制 LED
+- `RELAY <ON|OFF>` - 控制繼電器
+- `GPIO <HIGH|LOW>` - 設定 GPIO 電平
+
+**WiFi 控制範例：**
+- `WIFI <ssid> <password>` - 連接 WiFi
+- `AP ON` - 啟用 AP 模式
+- `IP` - 顯示 IP 位址
+
+**設定管理範例：**
+- `SAVE` - 儲存所有設定到 NVS
+- `PERIPHERAL SAVE` - 儲存週邊設定
+- `LOAD` - 載入設定
+- `RESET` - 重設為出廠預設值
+
+📖 **完整命令列表請參閱 [README.md](README.md) 的「可用命令」章節。**
 
 **命令特性：**
 - 所有命令不區分大小寫（`help` = `HELP` = `HeLp`）
@@ -505,6 +540,81 @@ python test_all.py both
    - HID 測試腳本應顯示：`HID_ESP32_S3`
    - CDC Monitor 不應有回應（SCPI 回應到來源）
    - 驗證 SCPI 來源路由功能
+
+### 場景 5：測試週邊控制功能
+
+**目標**：驗證週邊控制命令和 DELAY 腳本功能
+
+**方法 1：使用 CDC 互動模式測試週邊**
+```bash
+python test_cdc.py interactive
+
+# 在互動模式中測試週邊控制：
+>>> UART1 MODE PWM
+✅ UART1 mode set to: PWM/RPM
+
+>>> UART1 PWM 1000 50 ON
+✅ UART1 PWM: 1000Hz, 50.0%, Enabled
+
+>>> BUZZER 2000 50 ON
+✅ Buzzer: 2000Hz, 50.0%, Enabled
+
+>>> RELAY ON
+✅ Relay: ON
+
+>>> PERIPHERAL STATUS
+(顯示所有週邊狀態)
+
+>>> PERIPHERAL SAVE
+✅ Peripheral settings saved to NVS
+```
+
+**方法 2：測試 DELAY 命令和腳本化控制**
+```bash
+# 創建測試腳本 test_peripheral_sequence.txt：
+BUZZER 2000 50 ON
+DELAY 1000
+BUZZER 3000 50 ON
+DELAY 1000
+BUZZER 0 0 OFF
+RELAY ON
+DELAY 2000
+RELAY OFF
+
+# 執行腳本（逐行發送）：
+python test_cdc.py interactive
+>>> (貼上腳本內容)
+```
+
+**預期結果**：
+- UART1 模式切換成功
+- 蜂鳴器發出 2 秒聲音（頻率變化）
+- 繼電器開啟 2 秒後關閉
+- DELAY 命令正確執行延遲
+- 設定可成功儲存到 NVS
+
+**方法 3：測試 UART1 預設模式行為**
+```bash
+# 步驟 1：設定 UART1 為 UART 模式
+python test_cdc.py interactive
+>>> UART1 MODE UART
+✅ UART1 mode set to: UART
+
+>>> PERIPHERAL SAVE
+✅ Peripheral settings saved to NVS
+
+# 步驟 2：重新啟動裝置（按 RESET 或重新插拔 USB）
+
+# 步驟 3：檢查 UART1 模式
+python test_cdc.py interactive
+>>> UART1 STATUS
+Mode: PWM/RPM  ← 應該顯示 PWM/RPM（預設模式，非持久化）
+```
+
+**預期結果**：
+- UART1 每次上電都自動回到 PWM/RPM 模式
+- 其他週邊設定保持儲存的值
+- 驗證 UART1 預設模式設計正常
 
 ## 驗證回應路由功能
 

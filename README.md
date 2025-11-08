@@ -27,6 +27,17 @@
 - **設定持久化**：儲存至 NVS（非揮發性儲存）
 - **狀態 LED 指示**：WS2812 RGB LED 顯示系統狀態
 
+### 週邊控制功能
+- **UART1 多工器**：TX1/RX1 支援 UART、PWM/RPM 或關閉模式（預設 PWM/RPM）
+- **UART2 通訊**：TX2/RX2 標準序列埠通訊
+- **蜂鳴器 PWM**：可調頻率 (10-20000 Hz) 和佔空比
+- **LED PWM 控制**：可調頻率 (100-20000 Hz) 和亮度
+- **繼電器控制**：數位開關輸出
+- **GPIO 輸出**：通用數位 I/O
+- **使用者按鍵**：3 個按鍵輸入，支援防抖和長按檢測
+- **週邊設定持久化**：所有週邊參數可儲存至 NVS
+- **命令延遲**：DELAY 命令支援腳本化控制序列
+
 ## 📚 語言說明 / Language Notes
 
 本專案採用雙語文件策略：
@@ -38,6 +49,8 @@ This project uses a bilingual documentation strategy:
 
 - **CLAUDE.md** - English (for AI assistants and international developers)
 - **README.md, PROTOCOL.md, TESTING.md** - Traditional Chinese (for primary users)
+
+📖 **完整文件索引請參閱 [DOCS_INDEX.md](DOCS_INDEX.md)** - 幫助您快速找到所需文件
 
 ## 📋 系統需求
 
@@ -181,6 +194,7 @@ python scripts/test_hid.py interactive-0xa1
 | `SEND` | 發送測試 HID IN 報告 | 確認訊息 |
 | `READ` | 讀取 HID 緩衝區 | Hex dump (64 bytes) |
 | `CLEAR` | 清除 HID 緩衝區 | 確認訊息 |
+| `DELAY <ms>` | 延遲指定毫秒數 (1-60000ms) | `DELAY 1000` |
 
 ### 馬達控制命令
 
@@ -206,6 +220,81 @@ python scripts/test_hid.py interactive-0xa1
 | `AP OFF` | 停用 AP 模式 | `AP OFF` |
 | `AP STATUS` | 顯示 AP 狀態 | `AP STATUS` |
 | `IP` | 顯示 IP 位址和網路資訊 | `IP` |
+
+### 週邊控制命令
+
+#### UART1 多工器 (TX1/RX1)
+
+UART1 支援三種模式：UART 通訊、PWM/RPM 輸出，或關閉。
+
+**重要：** UART1 在每次上電時都會自動設定為 **PWM/RPM 模式**（預設），此設定不會持久化。您可以透過命令隨時切換模式。
+
+| 命令 | 說明 | 範例 |
+|------|------|------|
+| `UART1 MODE <UART\|PWM\|OFF>` | 切換 UART1 模式 | `UART1 MODE PWM` |
+| `UART1 CONFIG <baud>` | 設定 UART 模式鮑率 (2400-1500000) | `UART1 CONFIG 115200` |
+| `UART1 PWM <freq> <duty> [ON\|OFF]` | 設定 PWM 參數 (1-500000 Hz, 0-100%) | `UART1 PWM 1000 50 ON` |
+| `UART1 STATUS` | 顯示 UART1 目前狀態 | `UART1 STATUS` |
+| `UART1 WRITE <text>` | UART 模式發送文字資料 | `UART1 WRITE Hello` |
+
+**模式說明：**
+- **UART 模式**：TX1/RX1 作為標準序列埠使用 (可設定鮑率)
+- **PWM/RPM 模式**：TX1 輸出 PWM 訊號，RX1 測量 RPM (預設模式)
+- **OFF 模式**：關閉 UART1，節省資源
+
+#### UART2 (TX2/RX2)
+
+| 命令 | 說明 | 範例 |
+|------|------|------|
+| `UART2 CONFIG <baud>` | 設定 UART2 鮑率 (2400-1500000) | `UART2 CONFIG 9600` |
+| `UART2 STATUS` | 顯示 UART2 狀態 | `UART2 STATUS` |
+| `UART2 WRITE <text>` | 發送文字資料 | `UART2 WRITE Test` |
+
+#### 蜂鳴器 (Buzzer)
+
+| 命令 | 說明 | 範例 |
+|------|------|------|
+| `BUZZER <freq> <duty> [ON\|OFF]` | 設定蜂鳴器參數 (10-20000 Hz, 0-100%) | `BUZZER 2000 50 ON` |
+| `BUZZER STATUS` | 顯示蜂鳴器狀態 | `BUZZER STATUS` |
+
+#### LED PWM
+
+| 命令 | 說明 | 範例 |
+|------|------|------|
+| `LED_PWM <freq> <brightness> [ON\|OFF]` | 設定 LED 參數 (100-20000 Hz, 0-100%) | `LED_PWM 1000 25 ON` |
+| `LED_PWM STATUS` | 顯示 LED 狀態 | `LED_PWM STATUS` |
+
+#### 繼電器 (Relay)
+
+| 命令 | 說明 | 範例 |
+|------|------|------|
+| `RELAY <ON\|OFF>` | 控制繼電器開關 | `RELAY ON` |
+| `RELAY STATUS` | 顯示繼電器狀態 | `RELAY STATUS` |
+
+#### GPIO 通用接腳
+
+| 命令 | 說明 | 範例 |
+|------|------|------|
+| `GPIO <HIGH\|LOW>` | 設定 GPIO 輸出電平 | `GPIO HIGH` |
+| `GPIO STATUS` | 顯示 GPIO 狀態 | `GPIO STATUS` |
+
+#### 使用者按鍵
+
+| 命令 | 說明 | 範例 |
+|------|------|------|
+| `KEYS MODE <DUTY\|FREQ>` | 設定按鍵調整模式（佔空比或頻率） | `KEYS MODE DUTY` |
+| `KEYS STEP <duty_step> <freq_step>` | 設定調整步長 (0.1-10%, 10-10000Hz) | `KEYS STEP 1.0 100` |
+| `KEYS STATUS` | 顯示按鍵設定和狀態 | `KEYS STATUS` |
+
+#### 週邊設定持久化
+
+| 命令 | 說明 | 範例 |
+|------|------|------|
+| `PERIPHERAL SAVE` | 儲存所有週邊設定到 NVS | `PERIPHERAL SAVE` |
+| `PERIPHERAL LOAD` | 從 NVS 載入週邊設定 | `PERIPHERAL LOAD` |
+| `PERIPHERAL RESET` | 重設週邊為出廠預設值 | `PERIPHERAL RESET` |
+
+**注意：** UART1 模式設定會儲存到 NVS，但不會在開機時自動套用。系統每次上電都會強制設定為 PWM/RPM 模式。
 
 ### 設定儲存命令
 
@@ -245,6 +334,46 @@ Access: http://192.168.1.100
 # 儲存設定
 > SAVE
 ✅ Settings saved to NVS
+
+# 週邊控制範例
+# UART1 切換到 UART 模式並發送資料
+> UART1 MODE UART
+✅ UART1 mode set to: UART
+
+> UART1 CONFIG 9600
+✅ UART1 UART baud rate set to: 9600
+
+> UART1 WRITE Hello World
+✅ UART1 sent 11 bytes
+
+# 切回 PWM/RPM 模式
+> UART1 MODE PWM
+✅ UART1 mode set to: PWM/RPM
+
+> UART1 PWM 5000 75 ON
+✅ UART1 PWM: 5000Hz, 75.0%, Enabled
+
+# 控制蜂鳴器
+> BUZZER 2000 50 ON
+✅ Buzzer: 2000Hz, 50.0%, Enabled
+
+> DELAY 1000
+Delaying 1000 ms...
+Delay completed
+
+> BUZZER 0 0 OFF
+✅ Buzzer disabled
+
+# 控制繼電器和 GPIO
+> RELAY ON
+✅ Relay: ON
+
+> GPIO HIGH
+✅ GPIO: HIGH
+
+# 儲存週邊設定
+> PERIPHERAL SAVE
+✅ Peripheral settings saved to NVS
 ```
 
 ### Web 介面存取
@@ -472,6 +601,8 @@ pio run -t upload
 
 ## 🔌 硬體接腳定義
 
+### 馬達控制和狀態顯示
+
 | 功能 | GPIO | 週邊 | 說明 |
 |------|------|------|------|
 | PWM 輸出 | 10 | MCPWM1_A | 馬達控制 PWM 訊號 |
@@ -480,6 +611,22 @@ pio run -t upload
 | 狀態 LED | 48 | RMT Channel 0 | WS2812 RGB LED |
 | USB D- | 19 | USB OTG | 內建 USB |
 | USB D+ | 20 | USB OTG | 內建 USB |
+
+### 週邊控制接腳
+
+| 功能 | GPIO | 週邊 | 說明 |
+|------|------|------|------|
+| UART1 TX | 17 (TX1) | UART1 TX | UART/PWM 多工輸出 |
+| UART1 RX | 18 (RX1) | UART1 RX / MCPWM0_CAP1 | UART 輸入或 RPM 測量 |
+| UART2 TX | 43 (TX2) | UART2 TX | 標準 UART 輸出 |
+| UART2 RX | 44 (RX2) | UART2 RX | 標準 UART 輸入 |
+| Buzzer | 21 | LEDC Channel 2 | 蜂鳴器 PWM 輸出 |
+| LED PWM | 14 | LEDC Channel 3 | LED 亮度控制 |
+| Relay | 13 | Digital Out | 繼電器控制輸出 |
+| GPIO | 47 | Digital Out | 通用 GPIO 輸出 |
+| User Key 1 | 1 | Digital In (Pull-up) | 使用者按鍵 1 (增加) |
+| User Key 2 | 2 | Digital In (Pull-up) | 使用者按鍵 2 (減少) |
+| User Key 3 | 42 | Digital In (Pull-up) | 使用者按鍵 3 (Enter) |
 
 ### 連接建議
 
@@ -503,36 +650,83 @@ ESP32 GPIO48 ─── 470Ω ─── WS2812 DIN
 GND ─────────────────────── WS2812 GND
 ```
 
+**蜂鳴器（GPIO 21）：**
+```
+ESP32 GPIO21 ─── 100Ω ───┬─── NPN 基極 (例如 2N2222)
+                         │
+              集極 ──── Buzzer+ ──── 5V
+              射極 ──── GND
+              Buzzer- ──── GND
+```
+
+**繼電器（GPIO 13）：**
+```
+ESP32 GPIO13 ─── 1kΩ ───┬─── NPN 基極
+                        │
+             集極 ──── Relay 線圈 ──── 5V
+             射極 ──── GND
+             二極體 (1N4148) 反向並聯於線圈
+```
+
+**UART1/UART2 連接：**
+```
+ESP32 TX1/TX2 ───── RX (目標裝置)
+ESP32 RX1/RX2 ───── TX (目標裝置)
+GND ──────────────── GND (共地)
+```
+
+**使用者按鍵（GPIO 1, 2, 42）：**
+```
+GPIO ──┬── 按鍵 ── GND
+       └── 10kΩ ── 3.3V (內部上拉已啟用)
+```
+
 ## 🎯 專案結構
 
 ```
 composite_device_test/
 ├── src/
-│   ├── main.cpp              # 主程式（USB、WiFi、馬達初始化）
-│   ├── CustomHID.h/cpp       # 64-byte 自訂 HID 類別
-│   ├── CommandParser.h/cpp   # 統一命令解析器
-│   ├── HIDProtocol.h/cpp     # HID 協定處理
-│   ├── MotorControl.h/cpp    # PWM 和轉速計控制
-│   ├── MotorSettings.h/cpp   # 設定管理和 NVS 持久化
-│   ├── StatusLED.h/cpp       # WS2812 RGB LED 控制
-│   ├── wifi_defaults.h/cpp   # WiFi 預設配置
-│   └── ble_provisioning.h/cpp # BLE WiFi 配置
+│   ├── main.cpp                    # 主程式（USB、WiFi、馬達、週邊初始化）
+│   ├── CustomHID.h/cpp             # 64-byte 自訂 HID 類別
+│   ├── CommandParser.h/cpp         # 統一命令解析器
+│   ├── PeripheralCommands.cpp      # 週邊控制命令處理
+│   ├── HIDProtocol.h/cpp           # HID 協定處理
+│   ├── MotorControl.h/cpp          # PWM 和轉速計控制
+│   ├── MotorSettings.h/cpp         # 馬達設定管理
+│   ├── PeripheralManager.h/cpp     # 週邊統一管理器
+│   ├── PeripheralSettings.h/cpp    # 週邊設定和 NVS 持久化
+│   ├── PeripheralPins.h            # 週邊接腳定義
+│   ├── UART1Multiplexer.h/cpp      # UART1 多工器（UART/PWM/RPM）
+│   ├── UART2.h/cpp                 # UART2 通訊介面
+│   ├── Buzzer.h/cpp                # 蜂鳴器 PWM 控制
+│   ├── LEDPWM.h/cpp                # LED PWM 亮度控制
+│   ├── Relay.h/cpp                 # 繼電器控制
+│   ├── GPIOControl.h/cpp           # GPIO 輸出控制
+│   ├── UserKeys.h/cpp              # 使用者按鍵管理
+│   ├── StatusLED.h/cpp             # WS2812 RGB LED 狀態指示
+│   ├── WebServer.h/cpp             # Web 伺服器主檔
+│   ├── WebServer_Peripherals.cpp   # 週邊 REST API 端點
+│   ├── WiFiSettings.h/cpp          # WiFi 設定管理
+│   ├── WiFiManager.h/cpp           # WiFi 連線管理
+│   └── ble_provisioning.h/cpp      # BLE WiFi 配置
 ├── data/
-│   └── index.html            # Web 控制面板（SPIFFS）
+│   ├── index.html                  # Web 控制面板（馬達）
+│   ├── peripherals.html            # 週邊控制介面
+│   └── settings.html               # 系統設定介面
 ├── scripts/
-│   ├── test_hid.py           # HID 測試腳本
-│   ├── test_cdc.py           # CDC 測試腳本
-│   ├── test_all.py           # 整合測試腳本
-│   └── ble_client.py         # BLE GATT 測試客戶端
-├── requirements.txt          # Python 依賴套件清單
-├── platformio.ini            # PlatformIO 配置
-├── README.md                 # 本文件（繁體中文）
-├── PROTOCOL.md               # HID 協定規格（繁體中文）
-├── TESTING.md                # 測試指南（繁體中文）
-├── CLAUDE.md                 # AI 開發說明（英文）
-├── IMPLEMENTATION_GUIDE.md   # 實作指南（英文）
-├── MOTOR_INTEGRATION_PLAN.md # 整合計畫（英文）
-└── STATUS_LED_GUIDE.md       # LED 指南（英文）
+│   ├── test_hid.py                 # HID 測試腳本
+│   ├── test_cdc.py                 # CDC 測試腳本
+│   ├── test_all.py                 # 整合測試腳本
+│   └── ble_client.py               # BLE GATT 測試客戶端
+├── requirements.txt                # Python 依賴套件清單
+├── platformio.ini                  # PlatformIO 配置
+├── README.md                       # 本文件（繁體中文）
+├── PROTOCOL.md                     # HID 協定規格（繁體中文）
+├── TESTING.md                      # 測試指南（繁體中文）
+├── CLAUDE.md                       # AI 開發說明（英文）
+├── IMPLEMENTATION_GUIDE.md         # 實作指南（英文）
+├── MOTOR_INTEGRATION_PLAN.md       # 整合計畫（英文）
+└── STATUS_LED_GUIDE.md             # LED 指南（英文）
 ```
 
 ## 🛠️ 開發
