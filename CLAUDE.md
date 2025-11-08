@@ -20,6 +20,17 @@ This is an ESP32-S3 multi-interface motor control system with comprehensive comm
 - **Settings Persistence**: Configuration stored in NVS (Non-Volatile Storage)
 - **Status LED**: WS2812 RGB LED for system state indication
 
+**Peripheral Control Features:**
+- **UART1 Multiplexer**: TX1/RX1 supports UART, PWM/RPM, or OFF modes (defaults to PWM/RPM on power-up)
+- **UART2 Communication**: TX2/RX2 standard serial port communication
+- **Buzzer PWM**: Adjustable frequency (10-20000 Hz) and duty cycle
+- **LED PWM Control**: Adjustable frequency (100-20000 Hz) and brightness
+- **Relay Control**: Digital on/off output
+- **GPIO Output**: General-purpose digital I/O
+- **User Keys**: 3 button inputs with debouncing and long-press detection
+- **Peripheral Settings Persistence**: All peripheral parameters can be saved to NVS
+- **DELAY Command**: Scriptable control sequences with timed delays (1-60000ms)
+
 **Important Note:** ESP32-S3 does **not** support Classic Bluetooth (BR/EDR) and therefore does not support Bluetooth Serial Port Profile (SPP). Only BLE (Bluetooth Low Energy) is available.
 
 **Hardware Platform:**
@@ -404,6 +415,8 @@ SCPI commands route responses to their **source interface** (standard SCPI behav
 - **SCPI commands**: Maintains standard SCPI behavior where queries respond to the querying interface
 
 **Available Commands:**
+
+**Basic Commands:**
 - `*IDN?` - SCPI standard identification (returns device ID only, no command echo)
 - `HELP` - Show command list
 - `INFO` - Device information
@@ -411,6 +424,71 @@ SCPI commands route responses to their **source interface** (standard SCPI behav
 - `SEND` - Send test HID IN report (0x00-0x3F pattern)
 - `READ` - Display HID OUT buffer contents in hex dump format
 - `CLEAR` - Clear HID OUT buffer
+- `DELAY <ms>` - Insert delay between commands (1-60000ms), useful for scripted sequences
+
+**Motor Control Commands:**
+- `SET PWM_FREQ <Hz>` - Set PWM frequency (10-500000 Hz)
+- `SET PWM_DUTY <%>` - Set PWM duty cycle (0-100%)
+- `SET POLE_PAIRS <num>` - Set motor pole pairs (1-12)
+- `SET MAX_FREQ <Hz>` - Set maximum frequency limit
+- `SET LED_BRIGHTNESS <val>` - Set status LED brightness (0-255)
+- `RPM` - Get current RPM reading
+- `MOTOR STATUS` - Display detailed motor status
+- `MOTOR STOP` - Emergency stop (set duty to 0%)
+
+**WiFi Commands:**
+- `WIFI <ssid> <password>` - Connect to WiFi immediately
+- `WIFI CONNECT` - Connect using saved credentials
+- `START_WEB` - Start web server manually
+- `AP ON` - Enable Access Point mode
+- `AP OFF` - Disable Access Point mode
+- `AP STATUS` - Show AP status
+- `IP` - Show IP address and network info
+
+**UART1 Multiplexer Commands (TX1/RX1):**
+- `UART1 MODE <UART|PWM|OFF>` - Switch UART1 mode
+- `UART1 CONFIG <baud>` - Set UART mode baud rate (2400-1500000)
+- `UART1 PWM <freq> <duty> [ON|OFF]` - Set PWM parameters (1-500000 Hz, 0-100%)
+- `UART1 STATUS` - Show UART1 current status
+- `UART1 WRITE <text>` - Send text data in UART mode
+
+Note: UART1 defaults to PWM/RPM mode on every power-up (non-persistent).
+
+**UART2 Commands (TX2/RX2):**
+- `UART2 CONFIG <baud>` - Set UART2 baud rate (2400-1500000)
+- `UART2 STATUS` - Show UART2 status
+- `UART2 WRITE <text>` - Send text data
+
+**Buzzer Commands:**
+- `BUZZER <freq> <duty> [ON|OFF]` - Set buzzer parameters (10-20000 Hz, 0-100%)
+- `BUZZER STATUS` - Show buzzer status
+
+**LED PWM Commands:**
+- `LED_PWM <freq> <brightness> [ON|OFF]` - Set LED parameters (100-20000 Hz, 0-100%)
+- `LED_PWM STATUS` - Show LED status
+
+**Relay Commands:**
+- `RELAY <ON|OFF>` - Control relay on/off
+- `RELAY STATUS` - Show relay status
+
+**GPIO Commands:**
+- `GPIO <HIGH|LOW>` - Set GPIO output level
+- `GPIO STATUS` - Show GPIO status
+
+**User Keys Commands:**
+- `KEYS MODE <DUTY|FREQ>` - Set key adjustment mode (duty cycle or frequency)
+- `KEYS STEP <duty_step> <freq_step>` - Set adjustment step sizes (0.1-10%, 10-10000Hz)
+- `KEYS STATUS` - Show key settings and state
+
+**Peripheral Settings Commands:**
+- `PERIPHERAL SAVE` - Save all peripheral settings to NVS
+- `PERIPHERAL LOAD` - Load peripheral settings from NVS
+- `PERIPHERAL RESET` - Reset peripherals to factory defaults
+
+**General Settings Commands:**
+- `SAVE` - Save all settings to NVS
+- `LOAD` - Load settings from NVS
+- `RESET` - Reset to factory defaults
 
 **Adding New Commands:**
 1. Add command handler method in `CommandParser` class (e.g., `handleNewCommand()`)
