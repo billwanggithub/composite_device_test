@@ -395,6 +395,8 @@ void motorTask(void* parameter) {
         // Update RPM reading
         if (now - lastRPMUpdate >= pdMS_TO_TICKS(motorSettingsManager.get().rpmUpdateRate)) {
             motorControl.updateRPM();
+            // Update UART1 RPM measurement if in PWM/RPM mode
+            peripheralManager.getUART1().updateRPMFrequency();
             lastRPMUpdate = now;
         }
 
