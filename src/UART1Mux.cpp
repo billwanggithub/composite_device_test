@@ -806,9 +806,9 @@ void UART1Mux::updatePWMRegistersDirectly(uint32_t period, float duty) {
     }
 
     // Update comparator A value directly (for duty cycle)
-    // Based on ESP32-S3 MCPWM structure: operator[0] contains generators
-    // Generator A comparator is in timestamp[0]
-    MCPWM1.operator[0].timestamp[0].cmpr_value = cmpr_val;
+    // Based on ESP32-S3 MCPWM structure: generator 0A comparator
+    // Access via operators_timersel union and gen[0] structure
+    MCPWM1.channel[0].cmpr_value[0] = cmpr_val;
 
     taskEXIT_CRITICAL(&mux);
 }
