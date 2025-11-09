@@ -224,24 +224,60 @@ def find_esp32_port() -> Optional[str]:
     return None
 
 def send_command(ser: serial.Serial, command: str, wait_time: float = COMMAND_RESPONSE_DELAY) -> str:
-    """發送命令並讀取回應"""
-    ser.write(f"{command}\n".encode('utf-8'))
-    time.sleep(wait_time)
-    response = ""
+    """發送命令並讀取回應（帶重試機制）"""
+    max_retries = 2
+    retry_delay = 0.5
 
-    # 讀取初始回應
-    while ser.in_waiting:
-        response += ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
-        time.sleep(POLL_INTERVAL)
+    for attempt in range(max_retries + 1):
+        try:
+            # 清空緩衝區
+            ser.reset_input_buffer()
+            ser.reset_output_buffer()
 
-    # 再等待以捕獲調試訊息（如 GLITCH-FREE PATH）
-    # ESP32 的調試輸出可能有延遲，多輪等待確保捕獲
-    for _ in range(3):
-        time.sleep(0.05)
-        if ser.in_waiting:
-            response += ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
+            # 發送命令
+            ser.write(f"{command}\n".encode('utf-8'))
+            ser.flush()  # 確保數據發送完畢
+            time.sleep(wait_time)
+            response = ""
 
-    return response
+            # 讀取初始回應
+            while ser.in_waiting:
+                response += ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
+                time.sleep(POLL_INTERVAL)
+
+            # 再等待以捕獲調試訊息（如 GLITCH-FREE PATH）
+            # ESP32 的調試輸出可能有延遲，多輪等待確保捕獲
+            for _ in range(3):
+                time.sleep(0.05)
+                if ser.in_waiting:
+                    response += ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
+
+            return response
+
+        except serial.SerialException as e:
+            if attempt < max_retries:
+                print_warning(f"串口錯誤（嘗試 {attempt + 1}/{max_retries + 1}）：{e}")
+                print_info(f"等待 {retry_delay} 秒後重試...")
+                time.sleep(retry_delay)
+            else:
+                print_fail(f"串口通訊失敗（已重試 {max_retries} 次）")
+                raise
+
+    return ""
+
+def check_serial_health(ser: serial.Serial) -> bool:
+    """檢查串口連接健康狀態"""
+    try:
+        if not ser.is_open:
+            print_fail("串口已關閉")
+            return False
+
+        # 嘗試讀取串口狀態
+        _ = ser.in_waiting
+        return True
+    except Exception as e:
+        print_fail(f"串口健康檢查失敗：{e}")
+        return False
 
 def extract_debug_info(response: str) -> None:
     """提取並顯示調試訊息"""
@@ -289,6 +325,17 @@ def test_hardware_setup() -> None:
     print()
 
     wait_for_user("🔌 請連接 TX1 到 RX1，然後按 ENTER 開始測試...")
+
+    # 診斷：檢查設備回應
+    print_info("診斷：測試設備連接...")
+    try:
+        test_response = send_command(ser, "INFO", wait_time=1.0)
+        if test_response:
+            print_success("設備回應正常")
+        else:
+            print_warning("設備無回應（可能正常，取決於韌體版本）")
+    except Exception as e:
+        print_warning(f"診斷測試出現異常：{e}")
     print_success("硬體設置確認完成")
     print_info("接下來將進行測試套件 1：PWM/RPM 模式測試")
 
@@ -312,6 +359,10 @@ def test_pwm_rpm_mode(ser: serial.Serial) -> None:
     print_info("在不同頻率點測試 PWM 輸出...")
 
     for freq, desc in TEST_FREQUENCIES:
+        # 健康檢查
+        if not check_serial_health(ser):
+            print_fail("串口連接異常，中止測試")
+            return
         print(f"\n  測試 {desc}：{freq} Hz")
 
         # 設定 PWM 頻率，使用基準佔空比
