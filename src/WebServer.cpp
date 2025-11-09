@@ -1,7 +1,10 @@
 #include "WebServer.h"
+#include "CommandParser.h"
 #include "ArduinoJson.h"
 #include <WiFi.h>
 
+// 外部變數（從 main.cpp）
+extern CommandParser parser;
 
 WebServerManager::WebServerManager() {
     // Constructor
@@ -168,48 +171,84 @@ void WebServerManager::handleWebSocketMessage(void *arg, uint8_t *data, size_t l
 
         Serial.printf("[WS] Received: %s\n", message.c_str());
 
-        // Parse JSON command
+        // 首先嘗試作為 JSON 命令解析
         StaticJsonDocument<256> doc;
         DeserializationError error = deserializeJson(doc, message);
 
-        if (error) {
-            Serial.printf("[WS] JSON parse error: %s\n", error.c_str());
-            return;
-        }
+        if (!error && doc.containsKey("cmd")) {
+            // JSON 格式的命令（保留向後兼容性）
+            const char* cmd = doc["cmd"];
+            if (!cmd) {
+                return;
+            }
 
-        const char* cmd = doc["cmd"];
-        if (!cmd) {
-            return;
-        }
+            // Handle legacy JSON commands (motor control now via UART1)
+            if (strcmp(cmd, "set_freq") == 0) {
+                uint32_t freq = doc["value"];
+                if (pPeripheralManager) {
+                    pPeripheralManager->getUART1().setPWMFrequency(freq);
+                    broadcastStatus();
+                }
+            }
+            else if (strcmp(cmd, "set_duty") == 0) {
+                float duty = doc["value"];
+                if (pPeripheralManager) {
+                    pPeripheralManager->getUART1().setPWMDuty(duty);
+                    broadcastStatus();
+                }
+            }
+            else if (strcmp(cmd, "stop") == 0) {
+                // Simple stop: set duty to 0% (emergency stop removed in v3.0)
+                if (pPeripheralManager) {
+                    pPeripheralManager->getUART1().setPWMDuty(0.0);
+                    broadcastStatus();
+                }
+            }
+            else if (strcmp(cmd, "clear_error") == 0) {
+                // No-op: emergency stop feature removed in v3.0
+                broadcastStatus();
+            }
+            else if (strcmp(cmd, "get_status") == 0) {
+                broadcastStatus();
+            }
+        } else {
+            // 作為文本命令處理（支持完整的命令解析系統）
+            // 相同的命令系統用於 CDC 和 HID
+            String trimmed = message;
+            trimmed.trim();
 
-        // Handle commands (motor control now via UART1)
-        if (strcmp(cmd, "set_freq") == 0) {
-            uint32_t freq = doc["value"];
-            if (pPeripheralManager) {
-                pPeripheralManager->getUART1().setPWMFrequency(freq);
-                broadcastStatus();
+            // 跳過空命令
+            if (trimmed.length() == 0) {
+                return;
             }
-        }
-        else if (strcmp(cmd, "set_duty") == 0) {
-            float duty = doc["value"];
-            if (pPeripheralManager) {
-                pPeripheralManager->getUART1().setPWMDuty(duty);
+
+            // 取得客戶端 ID（假設 info->num 是客戶端 ID）
+            uint32_t client_id = info->num;
+
+            // 創建 WebSocket 響應對象
+            WebSocketResponse wsResponse((void*)ws, client_id);
+
+            // 使用命令解析器處理命令
+            if (parser.processCommand(trimmed, &wsResponse, CMD_SOURCE_WEBSOCKET)) {
+                // 命令已處理，將響應發送回客戶端
+                String response = wsResponse.getResponse();
+
+                // 獲取發送消息的客戶端
+                AsyncWebSocketClient* client = ws->client(client_id);
+                if (client) {
+                    client->text(response);
+                }
+
+                // 也廣播狀態更新
                 broadcastStatus();
+            } else {
+                // 命令未識別，發送錯誤消息
+                String error = "❌ 未知命令: " + trimmed;
+                AsyncWebSocketClient* client = ws->client(client_id);
+                if (client) {
+                    client->text(error);
+                }
             }
-        }
-        else if (strcmp(cmd, "stop") == 0) {
-            // Simple stop: set duty to 0% (emergency stop removed in v3.0)
-            if (pPeripheralManager) {
-                pPeripheralManager->getUART1().setPWMDuty(0.0);
-                broadcastStatus();
-            }
-        }
-        else if (strcmp(cmd, "clear_error") == 0) {
-            // No-op: emergency stop feature removed in v3.0
-            broadcastStatus();
-        }
-        else if (strcmp(cmd, "get_status") == 0) {
-            broadcastStatus();
         }
     }
 }
@@ -248,6 +287,15 @@ void WebServerManager::setupRoutes() {
             request->send(SPIFFS, "/peripherals.html", "text/html");
         } else {
             request->send(404, "text/plain", "Peripherals page not found");
+        }
+    });
+
+    // Serve console page from SPIFFS
+    server->on("/console.html", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        if (SPIFFS.exists("/console.html")) {
+            request->send(SPIFFS, "/console.html", "text/html");
+        } else {
+            request->send(404, "text/plain", "Console page not found");
         }
     });
 

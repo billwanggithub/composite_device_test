@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Web Console</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .page-wrapper {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px;
+            border-radius: 10px 10px 0 0;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 0;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #00ff88;
+            text-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: #888;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.connected {
+            background-color: #00ff88;
+            box-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+        }
+
+        .status-indicator.disconnected {
+            background-color: #ff4455;
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .console-container {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 200px);
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0 0 10px 10px;
+            overflow: hidden;
+        }
+
+        .console-output {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #00ff88;
+            background: rgba(0, 0, 0, 0.3);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .console-line {
+            margin: 2px 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .console-line.response {
+            color: #00ff88;
+        }
+
+        .console-line.error {
+            color: #ff4455;
+        }
+
+        .console-line.warning {
+            color: #ffaa00;
+        }
+
+        .console-line.command {
+            color: #88ccff;
+        }
+
+        .console-input-area {
+            display: flex;
+            gap: 5px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .console-prompt {
+            color: #00ff88;
+            font-weight: bold;
+            min-width: 20px;
+        }
+
+        .console-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #00ff88;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            outline: none;
+            caret-color: #00ff88;
+        }
+
+        .console-input::placeholder {
+            color: rgba(0, 255, 136, 0.3);
+        }
+
+        /* Scrollbar styling */
+        .console-output::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .console-output::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .console-output::-webkit-scrollbar-thumb {
+            background: rgba(0, 255, 136, 0.3);
+            border-radius: 4px;
+        }
+
+        .console-output::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 255, 136, 0.5);
+        }
+
+        /* Help button */
+        .help-button {
+            margin-left: auto;
+            padding: 8px 15px;
+            background: rgba(0, 255, 136, 0.2);
+            border: 1px solid rgba(0, 255, 136, 0.5);
+            color: #00ff88;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .help-button:hover {
+            background: rgba(0, 255, 136, 0.4);
+            box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .nav-link {
+            padding: 10px 20px;
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            color: #00ff88;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: all 0.3s ease;
+            font-size: 13px;
+        }
+
+        .nav-link:hover {
+            background: rgba(0, 255, 136, 0.2);
+            box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+        }
+
+        /* Modal for help */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: rgba(30, 30, 46, 0.95);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 10px;
+            padding: 30px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            color: #e0e0e0;
+        }
+
+        .modal-content h2 {
+            color: #00ff88;
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+
+        .modal-content p {
+            margin: 10px 0;
+            line-height: 1.6;
+            font-size: 13px;
+        }
+
+        .modal-content code {
+            background: rgba(0, 0, 0, 0.5);
+            color: #00ff88;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .modal-close {
+            float: right;
+            font-size: 24px;
+            cursor: pointer;
+            color: #00ff88;
+            transition: all 0.3s ease;
+        }
+
+        .modal-close:hover {
+            color: #ffaa00;
+        }
+
+        .command-help {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-left: 3px solid #00ff88;
+            margin: 10px 0;
+            font-size: 12px;
+        }
+
+        .command-help code {
+            display: block;
+            padding: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-wrapper">
+        <div class="header">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1>🖥️ ESP32 Web Console</h1>
+                    <div class="status-bar">
+                        <div class="status-item">
+                            <span class="status-indicator disconnected" id="statusIndicator"></span>
+                            <span id="statusText">未連接</span>
+                        </div>
+                        <div class="status-item">
+                            訊息: <span id="messageCount">0</span>
+                        </div>
+                    </div>
+                </div>
+                <button class="help-button" onclick="toggleHelpModal()">📖 幫助</button>
+            </div>
+        </div>
+
+        <div class="console-container">
+            <div class="console-output" id="consoleOutput">
+                <div class="console-line">歡迎來到 ESP32 Web Console</div>
+                <div class="console-line">輸入 <span style="color: #ffaa00;">HELP</span> 以查看可用命令</div>
+                <div class="console-line">或輸入 <span style="color: #ffaa00;">INFO</span> 以查看裝置資訊</div>
+                <div class="console-line"></div>
+            </div>
+
+            <div class="console-input-area">
+                <span class="console-prompt">></span>
+                <input type="text" class="console-input" id="commandInput"
+                       placeholder="輸入命令並按 Enter..."
+                       autocomplete="off">
+            </div>
+        </div>
+
+        <div class="nav-links">
+            <a href="/" class="nav-link">📊 儀表板</a>
+            <a href="/settings.html" class="nav-link">⚙️ 設定</a>
+            <a href="/peripherals.html" class="nav-link">🔌 周邊設備</a>
+            <a href="/console.html" class="nav-link" style="background: rgba(0, 255, 136, 0.3);">🖥️ 控制台</a>
+        </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div class="modal" id="helpModal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="toggleHelpModal()">&times;</span>
+            <h2>Web Console 幫助</h2>
+
+            <p>Web Console 提供與 CDC 序列埠相同的命令介面，支持所有統一命令系統的命令。</p>
+
+            <h3 style="color: #88ccff; margin-top: 15px;">基本命令</h3>
+            <div class="command-help">
+                <code>HELP</code>
+                <p>顯示所有可用命令</p>
+            </div>
+            <div class="command-help">
+                <code>INFO</code>
+                <p>顯示裝置資訊</p>
+            </div>
+            <div class="command-help">
+                <code>STATUS</code>
+                <p>顯示系統狀態</p>
+            </div>
+
+            <h3 style="color: #88ccff; margin-top: 15px;">馬達控制命令</h3>
+            <div class="command-help">
+                <code>SET PWM <freq> <duty></code>
+                <p>設定 PWM 頻率 (Hz) 和佔空比 (%)</p>
+            </div>
+            <div class="command-help">
+                <code>RPM</code>
+                <p>讀取當前 RPM</p>
+            </div>
+            <div class="command-help">
+                <code>MOTOR STATUS</code>
+                <p>顯示馬達詳細狀態</p>
+            </div>
+
+            <h3 style="color: #88ccff; margin-top: 15px;">WiFi 命令</h3>
+            <div class="command-help">
+                <code>WIFI &lt;ssid&gt; &lt;password&gt;</code>
+                <p>連接到 WiFi 網絡</p>
+            </div>
+            <div class="command-help">
+                <code>IP</code>
+                <p>顯示 IP 位址資訊</p>
+            </div>
+
+            <p style="margin-top: 20px; color: #888; border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 10px;">
+                輸入 <code>HELP</code> 命令以獲取完整的命令列表。
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // WebSocket 連接
+        let ws = null;
+        let messageCount = 0;
+        let commandHistory = [];
+        let historyIndex = -1;
+        const MAX_HISTORY = 50;
+        const MAX_LINES = 1000;
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            const input = document.getElementById('commandInput');
+            input.addEventListener('keydown', handleKeyDown);
+            input.addEventListener('keyup', handleKeyUp);
+
+            connectWebSocket();
+        });
+
+        // WebSocket 連接
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+            ws = new WebSocket(wsUrl);
+
+            ws.addEventListener('open', function(event) {
+                updateStatus(true);
+                addConsoleLine('✓ 已連接到設備', 'response');
+                document.getElementById('commandInput').focus();
+            });
+
+            ws.addEventListener('message', function(event) {
+                addConsoleLine(event.data, 'response');
+                messageCount++;
+                document.getElementById('messageCount').textContent = messageCount;
+            });
+
+            ws.addEventListener('error', function(event) {
+                addConsoleLine('✗ WebSocket 錯誤', 'error');
+            });
+
+            ws.addEventListener('close', function(event) {
+                updateStatus(false);
+                addConsoleLine('✗ 已斷開連接，嘗試重新連接...', 'warning');
+                setTimeout(connectWebSocket, 3000);
+            });
+        }
+
+        // 更新連接狀態
+        function updateStatus(connected) {
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+
+            if (connected) {
+                indicator.className = 'status-indicator connected';
+                statusText.textContent = '已連接';
+            } else {
+                indicator.className = 'status-indicator disconnected';
+                statusText.textContent = '未連接';
+            }
+        }
+
+        // 添加控制台行
+        function addConsoleLine(text, className = 'response') {
+            const output = document.getElementById('consoleOutput');
+
+            // 限制最大行數
+            if (output.children.length > MAX_LINES) {
+                output.removeChild(output.firstChild);
+            }
+
+            const line = document.createElement('div');
+            line.className = `console-line ${className}`;
+            line.textContent = text;
+            output.appendChild(line);
+
+            // 自動滾動到底部
+            output.scrollTop = output.scrollHeight;
+        }
+
+        // 處理鍵盤按下
+        function handleKeyDown(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                sendCommand();
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                showPreviousCommand();
+            } else if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                showNextCommand();
+            }
+        }
+
+        // 處理鍵盤鬆開
+        function handleKeyUp(event) {
+            // 可以在這裡添加自動完成等功能
+        }
+
+        // 發送命令
+        function sendCommand() {
+            const input = document.getElementById('commandInput');
+            const command = input.value.trim();
+
+            if (command.length === 0) {
+                return;
+            }
+
+            // 添加到歷史記錄
+            commandHistory.push(command);
+            if (commandHistory.length > MAX_HISTORY) {
+                commandHistory.shift();
+            }
+            historyIndex = -1;
+
+            // 在控制台顯示命令
+            addConsoleLine('> ' + command, 'command');
+
+            // 發送命令
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(command);
+            } else {
+                addConsoleLine('✗ 未連接到設備', 'error');
+            }
+
+            // 清空輸入框
+            input.value = '';
+        }
+
+        // 顯示上一個命令
+        function showPreviousCommand() {
+            const input = document.getElementById('commandInput');
+
+            if (historyIndex < commandHistory.length - 1) {
+                historyIndex++;
+                input.value = commandHistory[commandHistory.length - 1 - historyIndex];
+            }
+        }
+
+        // 顯示下一個命令
+        function showNextCommand() {
+            const input = document.getElementById('commandInput');
+
+            if (historyIndex > 0) {
+                historyIndex--;
+                input.value = commandHistory[commandHistory.length - 1 - historyIndex];
+            } else if (historyIndex === 0) {
+                historyIndex = -1;
+                input.value = '';
+            }
+        }
+
+        // 切換幫助模態
+        function toggleHelpModal() {
+            const modal = document.getElementById('helpModal');
+            modal.classList.toggle('active');
+        }
+
+        // 點擊模態外部關閉
+        window.addEventListener('click', function(event) {
+            const modal = document.getElementById('helpModal');
+            if (event.target === modal) {
+                modal.classList.remove('active');
+            }
+        });
+    </script>
+</body>
+</html>

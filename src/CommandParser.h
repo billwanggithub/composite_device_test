@@ -7,7 +7,8 @@
 enum CommandSource {
     CMD_SOURCE_CDC,        // CDC 序列埠
     CMD_SOURCE_HID,        // HID 介面
-    CMD_SOURCE_BLE         // BLE GATT 介面
+    CMD_SOURCE_BLE,        // BLE GATT 介面
+    CMD_SOURCE_WEBSOCKET   // WebSocket 介面
 };
 
 // 命令回應介面
@@ -199,6 +200,28 @@ public:
 
 private:
     void* _characteristic;  // BLECharacteristic* (避免在 header 中引入 BLE 相依性)
+};
+
+// WebSocket 回應實作（透過 WebSocket）
+class WebSocketResponse : public ICommandResponse {
+public:
+    WebSocketResponse(void* ws_server, uint32_t client_id)
+        : _ws_server(ws_server), _client_id(client_id), _response_buffer() {}
+
+    void print(const char* str) override;
+    void println(const char* str) override;
+    void printf(const char* format, ...) override;
+
+    // 取得累積的響應
+    String getResponse() const { return _response_buffer; }
+
+    // 清除響應緩衝區
+    void clear() { _response_buffer = ""; }
+
+private:
+    void* _ws_server;           // AsyncWebSocket* (避免在 header 中引入相依性)
+    uint32_t _client_id;        // WebSocket 客戶端 ID
+    String _response_buffer;    // 累積響應文本
 };
 
 #endif // COMMAND_PARSER_H

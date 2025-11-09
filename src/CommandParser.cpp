@@ -1494,3 +1494,30 @@ void BLEResponse::printf(const char* format, ...) {
     va_end(args);
     print(buffer);
 }
+
+// ============================================================================
+// WebSocketResponse 實作
+// ============================================================================
+
+void WebSocketResponse::print(const char* str) {
+    if (!str) return;
+    _response_buffer += str;
+}
+
+void WebSocketResponse::println(const char* str) {
+    if (!str) {
+        _response_buffer += "\n";
+        return;
+    }
+    _response_buffer += str;
+    _response_buffer += "\n";
+}
+
+void WebSocketResponse::printf(const char* format, ...) {
+    char buffer[256];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buffer, sizeof(buffer), format, args);
+    va_end(args);
+    print(buffer);
+}
