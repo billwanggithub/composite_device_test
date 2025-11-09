@@ -773,21 +773,20 @@ void UART1Mux::calculatePWMParameters(uint32_t frequency, uint32_t& prescaler, u
 }
 
 void UART1Mux::updatePWMRegistersDirectly(uint32_t period, float duty) {
-    // MICROSECOND-BASED DUTY UPDATE
+    // SIMPLIFIED DUTY UPDATE - Direct percentage API
     //
-    // Using mcpwm_set_duty_in_us() instead of mcpwm_set_duty() to see if
-    // different internal implementation reduces/eliminates PWM stops.
+    // ESP-IDF source analysis shows both mcpwm_set_duty() and mcpwm_set_duty_in_us()
+    // use TEZ (Timer Equals Zero) synchronization and do NOT stop the timer.
     //
-    // Calculate duty in microseconds based on period
-    // period_us = 1000000 / frequency
-    // duty_us = period_us * (duty / 100.0)
+    // Using mcpwm_set_duty() (percentage form) is simpler and avoids potential
+    // rounding errors in microsecond conversion.
+    //
+    // According to ESP-IDF source:
+    // - Updates comparator value via mcpwm_ll_operator_set_compare_value()
+    // - Enables update on TEZ: mcpwm_ll_operator_enable_update_compare_on_tez()
+    // - New duty takes effect at next timer zero crossing (glitch-free)
 
-    float frequency_hz = 80000000.0 / (pwmPrescaler * period);  // Actual frequency from prescaler/period
-    float period_us = 1000000.0 / frequency_hz;
-    uint32_t duty_us = (uint32_t)(period_us * (duty / 100.0));
-
-    // Update duty using microsecond API
-    mcpwm_set_duty_in_us(MCPWM_UNIT_UART1_PWM, MCPWM_TIMER_UART1_PWM, MCPWM_GEN_A, duty_us);
+    mcpwm_set_duty(MCPWM_UNIT_UART1_PWM, MCPWM_TIMER_UART1_PWM, MCPWM_GEN_A, duty);
 
     // Store the period value for tracking
     pwmPeriod = period;
