@@ -375,7 +375,7 @@ def test_pwm_rpm_mode(ser: serial.Serial) -> None:
         if i == 0:
             glitch_note = "（預期：可能有毛刺）"
         else:
-            glitch_note = "（查看 CDC 控制台確認）"
+            glitch_note = "（查看上方調試訊息）"
 
         print(f"\n  切換 {i+1}：→ {freq} Hz ({TEST_BASELINE_DUTY}% 佔空比) {glitch_note}")
         cmd = f"UART1 PWM {freq} {TEST_BASELINE_DUTY} ON"
