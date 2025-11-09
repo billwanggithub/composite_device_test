@@ -5,6 +5,8 @@
 #include "driver/uart.h"
 #include "driver/ledc.h"
 #include "driver/mcpwm.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "PeripheralPins.h"
 
 /**
@@ -178,12 +180,22 @@ public:
     /**
      * @brief Set PWM frequency and duty simultaneously (MODE_PWM_RPM only)
      *
-     * Atomically updates both frequency and duty cycle at the next PWM cycle boundary.
-     * This ensures no intermediate states or glitches when changing both parameters.
+     * Atomically updates both frequency and duty cycle at the next PWM cycle boundary
+     * WITHOUT stopping the PWM output. Uses MCPWM hardware shadow registers and
+     * critical section protection to guarantee both parameters update simultaneously
+     * at the next TEZ (Timer Equals Zero) event.
+     *
+     * Benefits:
+     * - No PWM output interruption (continuous operation)
+     * - No glitches or intermediate states
+     * - Hardware-synchronized parameter loading
+     * - Suitable for continuous motor control
      *
      * @param frequency Frequency in Hz (1 - 500,000)
      * @param duty Duty cycle in percent (0.0 - 100.0)
      * @return true if successful
+     *
+     * @note Parameters take effect at the next PWM cycle boundary (TEZ event)
      */
     bool setPWMFrequencyAndDuty(uint32_t frequency, float duty);
 
@@ -317,6 +329,9 @@ public:
 private:
     Mode currentMode = MODE_DISABLED;
     uart_port_t uartNum = UART_NUM_UART1;
+
+    // Critical section mutex for atomic PWM parameter updates
+    portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 
     // UART mode state
     uint32_t uartBaudRate = 115200;
