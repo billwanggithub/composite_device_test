@@ -773,16 +773,22 @@ void UART1Mux::calculatePWMParameters(uint32_t frequency, uint32_t& prescaler, u
 }
 
 void UART1Mux::updatePWMRegistersDirectly(uint32_t period, float duty) {
-    // PURE API APPROACH - Restore PWM output first
+    // MICROSECOND-BASED DUTY UPDATE
     //
-    // Direct register access to period caused PWM to stop completely.
-    // Reverting to pure API approach to restore functionality.
-    // Will investigate register access issues separately.
+    // Using mcpwm_set_duty_in_us() instead of mcpwm_set_duty() to see if
+    // different internal implementation reduces/eliminates PWM stops.
+    //
+    // Calculate duty in microseconds based on period
+    // period_us = 1000000 / frequency
+    // duty_us = period_us * (duty / 100.0)
 
-    // Simply update duty using ESP-IDF API
-    // mcpwm_set_duty() should use shadow registers internally (TEZ update)
-    mcpwm_set_duty(MCPWM_UNIT_UART1_PWM, MCPWM_TIMER_UART1_PWM, MCPWM_GEN_A, duty);
+    float frequency_hz = 80000000.0 / (pwmPrescaler * period);  // Actual frequency from prescaler/period
+    float period_us = 1000000.0 / frequency_hz;
+    uint32_t duty_us = (uint32_t)(period_us * (duty / 100.0));
 
-    // Store the period value for tracking (not used for register update now)
+    // Update duty using microsecond API
+    mcpwm_set_duty_in_us(MCPWM_UNIT_UART1_PWM, MCPWM_TIMER_UART1_PWM, MCPWM_GEN_A, duty_us);
+
+    // Store the period value for tracking
     pwmPeriod = period;
 }
