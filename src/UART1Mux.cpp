@@ -299,48 +299,48 @@ bool UART1Mux::setPWMDuty(float duty) {
 
 bool UART1Mux::setPWMFrequencyAndDuty(uint32_t frequency, float duty) {
     // ==== ENTRY DEBUG ====
-    USBSerial.printf("[UART1] 🚀 setPWMFrequencyAndDuty() ENTRY: freq=%u Hz, duty=%.1f%%\n", frequency, duty);
-    USBSerial.printf("[UART1] 📊 Current: prescaler=%u, period=%u, freq=%u, duty=%.1f\n",
+    Serial.printf("[UART1] 🚀 setPWMFrequencyAndDuty() ENTRY: freq=%u Hz, duty=%.1f%%\n", frequency, duty);
+    Serial.printf("[UART1] 📊 Current: prescaler=%u, period=%u, freq=%u, duty=%.1f\n",
                      pwmPrescaler, pwmPeriod, pwmFrequency, pwmDuty);
-    USBSerial.flush();
+    Serial.flush();
 
     if (currentMode != MODE_PWM_RPM) {
-        USBSerial.println("[UART1] ❌ ABORT: Not in PWM_RPM mode");
+        Serial.println("[UART1] ❌ ABORT: Not in PWM_RPM mode");
         return false;
     }
 
     // Validate parameters
     if (!validatePWMFrequency(frequency)) {
-        USBSerial.println("[UART1] ❌ ABORT: Frequency validation failed");
+        Serial.println("[UART1] ❌ ABORT: Frequency validation failed");
         return false;
     }
 
     if (duty < 0.0 || duty > 100.0) {
-        USBSerial.println("[UART1] ❌ ABORT: Duty validation failed");
+        Serial.println("[UART1] ❌ ABORT: Duty validation failed");
         return false;
     }
 
     // Output pulse on GPIO 12 BEFORE changing parameters (to observe glitches)
-    USBSerial.println("[UART1] 📍 Outputting GPIO12 pulse...");
-    USBSerial.flush();
+    Serial.println("[UART1] 📍 Outputting GPIO12 pulse...");
+    Serial.flush();
     outputPWMChangePulse();
-    USBSerial.println("[UART1] ✅ GPIO12 pulse done");
+    Serial.println("[UART1] ✅ GPIO12 pulse done");
 
     // TRULY GLITCH-FREE ATOMIC UPDATE USING LL API
     // Calculate new prescaler and period for target frequency
     uint32_t new_prescaler, new_period;
     calculatePWMParameters(frequency, new_prescaler, new_period);
 
-    USBSerial.printf("[UART1] 🧮 Calculated params: prescaler=%u, period=%u\n", new_prescaler, new_period);
-    USBSerial.flush();
+    Serial.printf("[UART1] 🧮 Calculated params: prescaler=%u, period=%u\n", new_prescaler, new_period);
+    Serial.flush();
 
     // Check if prescaler needs to change
     if (new_prescaler != pwmPrescaler) {
         // Prescaler change required - must use mcpwm_set_frequency() (immediate update, may glitch)
-        USBSerial.printf("[UART1] ⚠️ PRESCALER CHANGE BRANCH: %u → %u\n",
+        Serial.printf("[UART1] ⚠️ PRESCALER CHANGE BRANCH: %u → %u\n",
                      pwmPrescaler, new_prescaler);
-        USBSerial.printf("[UART1] 🔍 Period change: %u → %u ticks\n", pwmPeriod, new_period);
-        USBSerial.flush();
+        Serial.printf("[UART1] 🔍 Period change: %u → %u ticks\n", pwmPeriod, new_period);
+        Serial.flush();
 
         esp_err_t err_freq = mcpwm_set_frequency(MCPWM_UNIT_UART1_PWM, MCPWM_TIMER_UART1_PWM, frequency);
         if (err_freq != ESP_OK) {
@@ -365,26 +365,26 @@ bool UART1Mux::setPWMFrequencyAndDuty(uint32_t frequency, float duty) {
                      frequency, duty, pwmPrescaler, pwmPeriod);
     } else {
         // Same prescaler - only duty update needed (TEZ-synchronized, glitch-free)
-        USBSerial.printf("[UART1] ✅ SAME PRESCALER BRANCH: prescaler=%u\n", pwmPrescaler);
-        USBSerial.printf("[UART1] 🔍 Period: %u → %u ticks, Duty: %.1f%% → %.1f%%\n",
+        Serial.printf("[UART1] ✅ SAME PRESCALER BRANCH: prescaler=%u\n", pwmPrescaler);
+        Serial.printf("[UART1] 🔍 Period: %u → %u ticks, Duty: %.1f%% → %.1f%%\n",
                      pwmPeriod, new_period, pwmDuty, duty);
-        USBSerial.flush();
+        Serial.flush();
 
-        USBSerial.println("[UART1] 🔧 Calling updatePWMRegistersDirectly()...");
+        Serial.println("[UART1] 🔧 Calling updatePWMRegistersDirectly()...");
         updatePWMRegistersDirectly(new_period, duty);
-        USBSerial.println("[UART1] ✅ updatePWMRegistersDirectly() returned");
+        Serial.println("[UART1] ✅ updatePWMRegistersDirectly() returned");
 
         // Update stored values
         pwmPeriod = new_period;
         pwmFrequency = frequency;
         pwmDuty = duty;
 
-        USBSerial.printf("[UART1] ✅ PWM updated (glitch-free): %u Hz, %.1f%%\n", frequency, duty);
-        USBSerial.flush();
+        Serial.printf("[UART1] ✅ PWM updated (glitch-free): %u Hz, %.1f%%\n", frequency, duty);
+        Serial.flush();
     }
 
-    USBSerial.println("[UART1] 🏁 setPWMFrequencyAndDuty() RETURN TRUE");
-    USBSerial.flush();
+    Serial.println("[UART1] 🏁 setPWMFrequencyAndDuty() RETURN TRUE");
+    Serial.flush();
     return true;
 }
 
@@ -807,46 +807,46 @@ void UART1Mux::updatePWMRegistersDirectly(uint32_t period, float duty) {
     //
     // Challenge: No mcpwm_set_period() API exists in ESP-IDF
 
-    USBSerial.printf("[UART1] 🔹 updatePWMRegistersDirectly() ENTRY: period=%u, duty=%.1f\n", period, duty);
-    USBSerial.printf("[UART1] 🔹 Current pwmPeriod=%u\n", pwmPeriod);
-    USBSerial.flush();
+    Serial.printf("[UART1] 🔹 updatePWMRegistersDirectly() ENTRY: period=%u, duty=%.1f\n", period, duty);
+    Serial.printf("[UART1] 🔹 Current pwmPeriod=%u\n", pwmPeriod);
+    Serial.flush();
 
     if (period != pwmPeriod) {
         // Period changed - must update frequency
-        USBSerial.printf("[UART1] 🔧 PERIOD CHANGED BRANCH: %u → %u ticks\n",
+        Serial.printf("[UART1] 🔧 PERIOD CHANGED BRANCH: %u → %u ticks\n",
                      pwmPeriod, period);
-        USBSerial.flush();
+        Serial.flush();
 
         // Calculate target frequency from prescaler and period
         uint32_t target_frequency = 80000000 / (pwmPrescaler * period);
-        USBSerial.printf("[UART1] 🔧 Calculated target_frequency=%u Hz\n", target_frequency);
-        USBSerial.flush();
+        Serial.printf("[UART1] 🔧 Calculated target_frequency=%u Hz\n", target_frequency);
+        Serial.flush();
 
         // Update frequency (immediate period update, may glitch)
-        USBSerial.println("[UART1] 🔧 Calling mcpwm_set_frequency()...");
-        USBSerial.flush();
+        Serial.println("[UART1] 🔧 Calling mcpwm_set_frequency()...");
+        Serial.flush();
         mcpwm_set_frequency(MCPWM_UNIT_UART1_PWM, MCPWM_TIMER_UART1_PWM, target_frequency);
-        USBSerial.println("[UART1] 🔧 mcpwm_set_frequency() returned");
+        Serial.println("[UART1] 🔧 mcpwm_set_frequency() returned");
 
         // Restore exact duty value (mcpwm_set_frequency proportionally scales duty)
-        USBSerial.println("[UART1] 🔧 Calling mcpwm_set_duty() to restore duty...");
-        USBSerial.flush();
+        Serial.println("[UART1] 🔧 Calling mcpwm_set_duty() to restore duty...");
+        Serial.flush();
         mcpwm_set_duty(MCPWM_UNIT_UART1_PWM, MCPWM_TIMER_UART1_PWM, MCPWM_GEN_A, duty);
-        USBSerial.println("[UART1] 🔧 mcpwm_set_duty() returned");
+        Serial.println("[UART1] 🔧 mcpwm_set_duty() returned");
 
         pwmPeriod = period;
     } else {
         // Period unchanged - duty-only update (glitch-free!)
-        USBSerial.printf("[UART1] ✨ DUTY-ONLY BRANCH: %.1f%% (period unchanged=%u)\n", duty, period);
-        USBSerial.flush();
+        Serial.printf("[UART1] ✨ DUTY-ONLY BRANCH: %.1f%% (period unchanged=%u)\n", duty, period);
+        Serial.flush();
 
         // TEZ-synchronized duty update (glitch-free)
-        USBSerial.println("[UART1] ✨ Calling mcpwm_set_duty() (TEZ-sync)...");
-        USBSerial.flush();
+        Serial.println("[UART1] ✨ Calling mcpwm_set_duty() (TEZ-sync)...");
+        Serial.flush();
         mcpwm_set_duty(MCPWM_UNIT_UART1_PWM, MCPWM_TIMER_UART1_PWM, MCPWM_GEN_A, duty);
-        USBSerial.println("[UART1] ✨ mcpwm_set_duty() returned");
+        Serial.println("[UART1] ✨ mcpwm_set_duty() returned");
     }
 
-    USBSerial.println("[UART1] 🔹 updatePWMRegistersDirectly() EXIT");
-    USBSerial.flush();
+    Serial.println("[UART1] 🔹 updatePWMRegistersDirectly() EXIT");
+    Serial.flush();
 }
