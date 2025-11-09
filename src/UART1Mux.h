@@ -360,6 +360,7 @@ private:
     bool pwmEnabled = false;
     uint32_t pwmPrescaler = 0;         // Current prescaler value
     uint32_t pwmPeriod = 0;            // Current period value (ticks)
+    bool pwmChangePulseState = false;  // GPIO12 toggle state for non-blocking pulse
 
     // Motor control parameters (integrated from old MotorControl)
     uint32_t polePairs = 2;            // Motor pole pairs (default 2)

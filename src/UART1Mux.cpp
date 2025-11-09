@@ -320,14 +320,9 @@ bool UART1Mux::setPWMFrequencyAndDuty(uint32_t frequency, float duty) {
         return false;
     }
 
-    // TEMPORARILY DISABLED: Test if pulse generation causes PWM glitches
-    // Output pulse on GPIO 12 BEFORE changing parameters (to observe glitches)
-    // Serial.println("[UART1] 📍 Outputting GPIO12 pulse...");
-    // Serial.flush();
-    // outputPWMChangePulse();
-    // Serial.println("[UART1] ✅ GPIO12 pulse done");
+    // Mark PWM parameter change with GPIO12 toggle (non-blocking, glitch-free)
+    outputPWMChangePulse();
 
-    // TRULY GLITCH-FREE ATOMIC UPDATE USING LL API
     // Calculate new prescaler and period for target frequency
     uint32_t new_prescaler, new_period;
     calculatePWMParameters(frequency, new_prescaler, new_period);
@@ -758,14 +753,21 @@ void UART1Mux::initPWMChangePulse() {
 }
 
 void UART1Mux::outputPWMChangePulse() {
-    // Generate a short pulse on GPIO 12 (10 microseconds HIGH)
-    // This pulse marks the exact moment when PWM parameters are being changed
-    // Use an oscilloscope to observe this pulse and correlate with any glitches
-    // on the PWM output (GPIO 17)
+    // NON-BLOCKING PWM change marker using GPIO toggle
+    //
+    // Instead of generating a pulse with delay (which blocks and causes PWM glitches),
+    // we simply toggle GPIO12 state each time PWM parameters change.
+    //
+    // Benefits:
+    // - Zero blocking time (no delayMicroseconds)
+    // - Does not interfere with MCPWM operation
+    // - Oscilloscope can trigger on rising or falling edge
+    // - Each PWM change creates a visible edge
+    //
+    // Usage: Trigger oscilloscope on either edge of GPIO12 to capture PWM changes
 
-    gpio_set_level((gpio_num_t)PIN_PWM_CHANGE_PULSE, 1);  // HIGH
-    delayMicroseconds(10);                                  // 10µs pulse width
-    gpio_set_level((gpio_num_t)PIN_PWM_CHANGE_PULSE, 0);  // LOW
+    pwmChangePulseState = !pwmChangePulseState;
+    gpio_set_level((gpio_num_t)PIN_PWM_CHANGE_PULSE, pwmChangePulseState ? 1 : 0);
 }
 
 // ============================================================================
