@@ -802,24 +802,34 @@ void UART1Mux::calculatePWMParameters(uint32_t frequency, uint32_t& prescaler, u
 }
 
 void UART1Mux::updatePWMRegistersDirectly(uint32_t period, float duty) {
-    // ADVANCED GLITCH-FREE UPDATE STRATEGY
+    // UNIFIED SHADOW REGISTER UPDATE STRATEGY
     //
-    // Two scenarios:
-    // 1. Period unchanged (duty-only): mcpwm_set_duty() - TEZ sync ✅
-    // 2. Period changed (frequency): Direct register + shadow mode - TEZ sync ✅
+    // Use direct register access with shadow mode for BOTH period and comparator:
+    // 1. Period: MCPWM1.timer[0].timer_cfg0 with PERIOD_UPMETHOD [24] = 1
+    // 2. Comparator: MCPWM1.channel[0].cmpr_value[0] with CMPR_A_UPMETHOD = 0 (TEZ sync)
     //
-    // Technical approach for period update:
-    // - Access MCPWM1.timer[0].timer_cfg0 register directly
-    // - Set TIMER_PERIOD_UPMETHOD bit [24] = 1 (enable shadow register)
-    // - Update period bits [23:8]
-    // - New period takes effect at next TEZ (glitch-free!)
+    // Both updates synchronized to TEZ (Timer Equals Zero) → Completely glitch-free!
+    //
+    // Register details:
+    // - timer_cfg0 [31:0]: prescaler[7:0], period[23:8], period_upmethod[24]
+    // - cmpr_value[0]: Comparator A value (duty = cmpr / period * 100%)
+    // - cmpr_cfg: cmpr_a_upmethod[9:8] (0x0 = TEZ sync, shadow register mode)
 
+    // Calculate comparator value from duty cycle
+    // duty (%) = (comparator / period) * 100
+    // comparator = (duty * period) / 100
+    uint32_t comparator = (uint32_t)((duty * period) / 100.0f);
+
+    // Ensure comparator doesn't exceed period
+    if (comparator > period) {
+        comparator = period;
+    }
+
+    // Critical section for atomic register updates
+    taskENTER_CRITICAL(&mux);
+
+    // ===== Update Period (if changed) =====
     if (period != pwmPeriod) {
-        // Period changed - use direct register access with shadow mode
-
-        // Critical section to ensure atomic register update
-        taskENTER_CRITICAL(&mux);
-
         // Read current CFG0 register value
         uint32_t cfg0_val = MCPWM1.timer[0].timer_cfg0.val;
 
@@ -833,19 +843,25 @@ void UART1Mux::updatePWMRegistersDirectly(uint32_t period, float duty) {
 
         // Write back to register
         MCPWM1.timer[0].timer_cfg0.val = cfg0_val;
+    }
 
-        taskEXIT_CRITICAL(&mux);
+    // ===== Update Comparator (duty cycle) =====
+    // Ensure CMPR_A_UPMETHOD is set to 0x0 (TEZ sync, shadow mode)
+    // This should already be configured during initialization, but verify:
+    uint32_t cmpr_cfg_val = MCPWM1.channel[0].cmpr_cfg.val;
 
-        // Update stored period value
+    // Clear CMPR_A_UPMETHOD bits [9:8] and set to 0x0 (TEZ sync)
+    cmpr_cfg_val &= 0xFFFFFCFF;  // Clear bits [9:8]
+    cmpr_cfg_val |= (0x0 << 8);   // Set to 0x0 = TEZ sync with shadow register
+    MCPWM1.channel[0].cmpr_cfg.val = cmpr_cfg_val;
+
+    // Update comparator value (will take effect at next TEZ)
+    MCPWM1.channel[0].cmpr_value[0].cmpr_val = comparator;
+
+    taskEXIT_CRITICAL(&mux);
+
+    // Update stored values
+    if (period != pwmPeriod) {
         pwmPeriod = period;
-
-        // Update duty using ESP-IDF API (TEZ-synchronized)
-        mcpwm_set_duty(MCPWM_UNIT_UART1_PWM, MCPWM_TIMER_UART1_PWM, MCPWM_GEN_A, duty);
-
-    } else {
-        // Period unchanged - duty-only update (glitch-free!)
-
-        // TEZ-synchronized duty update
-        mcpwm_set_duty(MCPWM_UNIT_UART1_PWM, MCPWM_TIMER_UART1_PWM, MCPWM_GEN_A, duty);
     }
 }
