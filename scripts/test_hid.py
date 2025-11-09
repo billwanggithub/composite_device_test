@@ -24,16 +24,30 @@ import pywinusb.hid as hid
 import time
 import sys
 import threading
+import os
+from typing import List, Optional, Tuple
 
-# ESP32-S3 VID/PID (可通過環境變數或參數覆蓋)
-VID = 0x303A
-PID = 0x1001  # ESP32-S3 TinyUSB HID 介面的 PID
+# ==================== 配置常數 ====================
+# ESP32-S3 VID/PID (可通過環境變數覆蓋)
+VID = int(os.environ.get('ESP32_VID', '0x303A'), 16)
+PID = int(os.environ.get('ESP32_PID', '0x1001'), 16)
 
-# 全域變數：接收到的回應
+# HID 封包參數
+HID_PACKET_SIZE = 64  # HID 資料封包大小（不含 Report ID）
+PROTOCOL_0xA1_HEADER_SIZE = 3  # 0xA1 協定標頭大小（0xA1 + length + 0x00）
+MAX_COMMAND_LENGTH = HID_PACKET_SIZE - PROTOCOL_0xA1_HEADER_SIZE  # 61 bytes
+
+# 超時設定
+DEFAULT_RESPONSE_TIMEOUT = 2.0  # 等待回應的預設超時（秒）
+SEND_COMMAND_DELAY = 0.5  # 發送命令後的等待時間（秒）
+POLL_INTERVAL = 0.1  # 輪詢間隔（秒）
+
+# ==================== 全域變數 ====================
+# 接收到的回應
 received_responses = []
 response_lock = threading.Lock()
 
-def list_devices():
+def list_devices() -> bool:
     """列出所有 HID 裝置"""
     print("=" * 60)
     print("可用的 HID 裝置:")
@@ -55,7 +69,7 @@ def list_devices():
 
     return found
 
-def find_device():
+def find_device() -> Optional[hid.HidDevice]:
     """尋找 ESP32-S3 HID 設備"""
     all_devices = hid.HidDeviceFilter(vendor_id=VID, product_id=PID).get_devices()
 
@@ -71,25 +85,30 @@ def find_device():
 
     return all_devices[0] if all_devices else None
 
-def data_handler(data):
-    """HID IN 報告處理函數"""
+def data_handler(data: List[int]) -> None:
+    """
+    HID IN 報告處理函數
+
+    注意：雖然 HID 描述符沒有 Report ID，但 pywinusb 仍會在 data[0] 加入
+    Report ID (值為 0)，實際 HID 資料從 data[1] 開始（64 bytes）
+    """
     global received_responses
 
-    # data 是接收到的原始數據（含 Report ID）
-    # 第一個 byte 是 Report ID
-    payload = data[1:]  # 跳過 Report ID
+    # data[0] = Report ID (pywinusb 自動添加，值為 0)
+    # data[1:65] = 實際 HID 資料（64 bytes）
+    payload = data[1:]  # 提取 64-byte HID 資料
 
     with response_lock:
         received_responses.append(bytes(payload))
 
-def send_data(device, data):
+def send_data(device: hid.HidDevice, data: List[int]) -> bool:
     """傳送 HID OUT 報告 - 無 Report ID，完整 64 位元組"""
     try:
-        # 準備資料（完整 64 位元組，無 Report ID）
-        if len(data) < 64:
-            data = list(data) + [0x00] * (64 - len(data))
-        elif len(data) > 64:
-            data = list(data[:64])
+        # 準備資料（完整 HID_PACKET_SIZE 位元組，無 Report ID）
+        if len(data) < HID_PACKET_SIZE:
+            data = list(data) + [0x00] * (HID_PACKET_SIZE - len(data))
+        elif len(data) > HID_PACKET_SIZE:
+            data = list(data[:HID_PACKET_SIZE])
 
         print(f"傳送 {len(data)} 位元組（無 Report ID）:")
         for i in range(0, min(len(data), 32), 16):
@@ -111,60 +130,79 @@ def send_data(device, data):
         print(f"✓ 成功傳送 {len(data)} 位元組！")
         return True
 
+    except AttributeError as e:
+        print(f"✗ 設備錯誤: {e}")
+        return False
+    except OSError as e:
+        print(f"✗ USB 通訊錯誤: {e}")
+        return False
     except Exception as e:
-        print(f"✗ 錯誤: {e}")
+        print(f"✗ 未知錯誤: {e}")
         return False
 
-def encode_command_0xA1(cmd_string):
+def encode_command_0xA1(cmd_string: str) -> List[int]:
     """
     編碼命令為 0xA1 協定格式
-    格式: [Report ID=0][0xA1][length][0x00][command_string...] + padding to 64 bytes
+
+    pywinusb 格式: [Report ID][64-byte HID data]
+    0xA1 協定格式: [0xA1][length][0x00][command_string...][padding]
+
+    返回: 65-byte list = [0] + [0xA1, length, 0x00, cmd_bytes, padding...]
+                         ↑        ↑________________________↑
+                      Report ID            64 bytes
     """
     cmd_bytes = cmd_string.encode('utf-8')
     length = len(cmd_bytes)
 
-    if length > 61:
-        print(f"⚠️  命令過長 ({length} bytes)，最多 61 bytes")
-        length = 61
-        cmd_bytes = cmd_bytes[:61]
+    if length > MAX_COMMAND_LENGTH:
+        print(f"⚠️  命令過長 ({length} bytes)，最多 {MAX_COMMAND_LENGTH} bytes")
+        length = MAX_COMMAND_LENGTH
+        cmd_bytes = cmd_bytes[:MAX_COMMAND_LENGTH]
 
-    # 建立 65-byte 封包 (1 byte Report ID + 64 bytes data)
-    packet = [0]  # Report ID = 0 (無 Report ID)
-    packet.append(0xA1)     # 命令類型
-    packet.append(length)   # 命令長度
-    packet.append(0x00)     # 保留位元
-    packet.extend(cmd_bytes)  # 命令內容
-    packet.extend([0] * (64 - 3 - length))  # 補零到 64 bytes
+    # 建立 65-byte 封包給 pywinusb (1 + HID_PACKET_SIZE)
+    packet = [0]  # [0] Report ID (pywinusb 需要，但實際不傳送到 USB)
+    packet.append(0xA1)     # [1] 0xA1 協定標記
+    packet.append(length)   # [2] 命令長度
+    packet.append(0x00)     # [3] 保留位元
+    packet.extend(cmd_bytes)  # [4:4+length] 命令內容
+    packet.extend([0] * (HID_PACKET_SIZE - PROTOCOL_0xA1_HEADER_SIZE - length))  # 補零
 
     return packet
 
-def decode_response_0xA1(data):
+def decode_response_0xA1(data: List[int]) -> Optional[str]:
     """
     解碼 0xA1 協定回應封包
-    格式: [Report ID=0][0xA1][length][0x00][response_text...]
+
+    輸入 data 格式（由呼叫者添加 Report ID）:
+    [0] Report ID = 0
+    [1] 0xA1 協定標記
+    [2] length (回應長度，1-61)
+    [3] 0x00 保留位元
+    [4:4+length] 回應文字
     """
     if len(data) < 5:
         return None
 
-    # data[0] 是 Report ID (應該是 0)
-    # data[1] 應該是 0xA1
+    # data[0] 是 Report ID (pywinusb 格式，應該是 0)
+    # data[1] 應該是 0xA1 協定標記
     if data[1] != 0xA1:
         return None
 
     length = data[2]
 
-    # 檢查長度合理性
-    if length == 0 or length > 61:
+    # 檢查長度合理性（最大 MAX_COMMAND_LENGTH bytes）
+    if length == 0 or length > MAX_COMMAND_LENGTH:
         return None
 
-    # 提取回應文字 (從 data[4] 開始)
+    # 提取回應文字 (從 data[4] 開始，長度為 length)
     try:
         response = bytes(data[4:4+length]).decode('utf-8', errors='ignore')
         return response
-    except:
+    except (UnicodeDecodeError, IndexError, TypeError):
+        # 解碼失敗、索引錯誤或類型錯誤
         return None
 
-def send_command(device, command, use_0xA1_protocol=False):
+def send_command(device: hid.HidDevice, command: str, use_0xA1_protocol: bool = False) -> bool:
     """發送命令到 HID 設備（自動加上 \\n）"""
     global received_responses
 
@@ -194,13 +232,13 @@ def send_command(device, command, use_0xA1_protocol=False):
         # 轉換為 bytes
         cmd_bytes = command.encode('ascii')
 
-        # 填充到 64 bytes
+        # 填充到 HID_PACKET_SIZE bytes
         data = list(cmd_bytes)
-        if len(data) < 64:
-            data += [0x00] * (64 - len(data))
-        elif len(data) > 64:
-            print(f"⚠ 警告: 命令長度 {len(cmd_bytes)} bytes 超過 64，將被截斷")
-            data = data[:64]
+        if len(data) < HID_PACKET_SIZE:
+            data += [0x00] * (HID_PACKET_SIZE - len(data))
+        elif len(data) > HID_PACKET_SIZE:
+            print(f"⚠ 警告: 命令長度 {len(cmd_bytes)} bytes 超過 {HID_PACKET_SIZE}，將被截斷")
+            data = data[:HID_PACKET_SIZE]
 
         print(f"發送命令: {command.strip()}")
         output_report.set_raw_data([0] + data)
@@ -208,7 +246,7 @@ def send_command(device, command, use_0xA1_protocol=False):
     output_report.send()
     return True
 
-def wait_for_response(timeout=2.0, use_0xA1_protocol=False):
+def wait_for_response(timeout: float = DEFAULT_RESPONSE_TIMEOUT, use_0xA1_protocol: bool = False) -> Optional[str]:
     """等待並返回回應"""
     global received_responses
 
@@ -221,8 +259,9 @@ def wait_for_response(timeout=2.0, use_0xA1_protocol=False):
                 if use_0xA1_protocol:
                     # 解碼 0xA1 協定回應
                     for data in received_responses:
-                        # data 已經是 bytes，需要轉換為 list
-                        data_list = [0] + list(data)  # 添加 Report ID
+                        # data 是 64-byte HID 資料（data_handler 已移除 Report ID）
+                        # decode_response_0xA1() 期望含 Report ID 的格式，所以補回 [0]
+                        data_list = [0] + list(data)  # 添加 Report ID 以符合解碼函數格式
                         response = decode_response_0xA1(data_list)
                         if response:
                             responses.append(response)
@@ -238,14 +277,15 @@ def wait_for_response(timeout=2.0, use_0xA1_protocol=False):
                     # 轉換為字串
                     try:
                         return full_response.decode('ascii')
-                    except:
+                    except UnicodeDecodeError:
+                        # 解碼失敗，返回十六進位
                         return full_response.hex()
 
-        time.sleep(0.1)
+        time.sleep(POLL_INTERVAL)
 
     return None
 
-def test_commands(use_0xA1=False):
+def test_commands(use_0xA1: bool = False) -> None:
     """測試所有命令"""
     print("搜尋 HID 設備...")
     device = find_device()
@@ -289,8 +329,8 @@ def test_commands(use_0xA1=False):
 
         if send_command(device, cmd, use_0xA1_protocol=use_0xA1):
             # 等待回應
-            time.sleep(0.5)
-            response = wait_for_response(timeout=2.0, use_0xA1_protocol=use_0xA1)
+            time.sleep(SEND_COMMAND_DELAY)
+            response = wait_for_response(timeout=DEFAULT_RESPONSE_TIMEOUT, use_0xA1_protocol=use_0xA1)
 
             if response:
                 print(f"<<< HID 回應:")
@@ -301,7 +341,7 @@ def test_commands(use_0xA1=False):
                 else:
                     print("<<< 未收到 HID 回應（預期行為，回應已發送到 CDC）")
 
-        time.sleep(0.5)
+        time.sleep(SEND_COMMAND_DELAY)
 
     print("\n" + "=" * 60)
     print("測試完成！")
@@ -309,7 +349,7 @@ def test_commands(use_0xA1=False):
     # 關閉設備
     device.close()
 
-def receive_data():
+def receive_data() -> None:
     """接收 HID IN 報告"""
     print("搜尋 HID 設備...")
     device = find_device()
@@ -336,7 +376,8 @@ def receive_data():
                 text = bytes(payload).rstrip(b'\x00').decode('ascii')
                 if text:
                     print(f"  文字: {text}")
-            except:
+            except UnicodeDecodeError:
+                # 無法解碼為 ASCII，跳過文字顯示
                 pass
             print()
 
@@ -344,13 +385,13 @@ def receive_data():
 
     try:
         while True:
-            time.sleep(0.1)
+            time.sleep(POLL_INTERVAL)
     except KeyboardInterrupt:
         print("\n停止接收")
     finally:
         device.close()
 
-def interactive_mode(use_0xA1=False):
+def interactive_mode(use_0xA1: bool = False) -> None:
     """互動模式 - 支援命令和十六進位資料"""
     protocol_name = "0xA1 協定" if use_0xA1 else "簡單協定"
     print("\n" + "=" * 60)
@@ -409,8 +450,8 @@ def interactive_mode(use_0xA1=False):
                     command = user_input[4:].strip()
                     if command:
                         if send_command(device, command, use_0xA1_protocol=current_protocol):
-                            time.sleep(0.5)
-                            response = wait_for_response(timeout=2.0, use_0xA1_protocol=current_protocol)
+                            time.sleep(SEND_COMMAND_DELAY)
+                            response = wait_for_response(timeout=DEFAULT_RESPONSE_TIMEOUT, use_0xA1_protocol=current_protocol)
                             if response:
                                 print(f"<<< {response}")
                             else:
@@ -430,8 +471,8 @@ def interactive_mode(use_0xA1=False):
                 else:
                     # 預設為命令模式
                     if send_command(device, user_input, use_0xA1_protocol=current_protocol):
-                        time.sleep(0.5)
-                        response = wait_for_response(timeout=2.0, use_0xA1_protocol=current_protocol)
+                        time.sleep(SEND_COMMAND_DELAY)
+                        response = wait_for_response(timeout=DEFAULT_RESPONSE_TIMEOUT, use_0xA1_protocol=current_protocol)
                         if response:
                             print(f"<<< {response}")
                         else:
@@ -448,7 +489,7 @@ def interactive_mode(use_0xA1=False):
     finally:
         device.close()
 
-def main():
+def main() -> None:
     print("=" * 60)
     print("ESP32-S3 USB HID 測試工具 - 64 位元組（無 Report ID）")
     print("使用 pywinusb 庫，支援簡單協定和 0xA1 協定")
@@ -506,21 +547,22 @@ def main():
         device.open()
         print(f"已開啟設備 {VID:04X}:{PID:04X}")
 
-        # 設置接收處理函數
-        device.set_raw_data_handler(data_handler)
+        try:
+            # 設置接收處理函數
+            device.set_raw_data_handler(data_handler)
 
-        # 發送命令
-        if send_command(device, cmd_str):
-            time.sleep(0.5)
-            response = wait_for_response(timeout=2.0)
+            # 發送命令
+            if send_command(device, cmd_str):
+                time.sleep(SEND_COMMAND_DELAY)
+                response = wait_for_response(timeout=DEFAULT_RESPONSE_TIMEOUT)
 
-            if response:
-                print(f"\n回應:")
-                print(response)
-            else:
-                print("\n未收到回應")
-
-        device.close()
+                if response:
+                    print(f"\n回應:")
+                    print(response)
+                else:
+                    print("\n未收到回應")
+        finally:
+            device.close()
 
     elif command == 'test':
         test_commands(use_0xA1=False)
@@ -546,8 +588,10 @@ def main():
                 return
 
             device.open()
-            send_data(device, data)
-            device.close()
+            try:
+                send_data(device, data)
+            finally:
+                device.close()
 
         except ValueError as e:
             print(f"✗ 無效的十六進位格式: {e}")

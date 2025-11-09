@@ -26,6 +26,29 @@ import sys
 import time
 import threading
 import asyncio
+from typing import List, Optional, Tuple
+
+# ==================== 配置常數 ====================
+# 序列埠參數
+DEFAULT_BAUDRATE = 115200
+READ_TIMEOUT = 0.5
+WRITE_TIMEOUT = 1.0
+
+# 設備檢測參數
+DEVICE_STABILIZATION_DELAY = 0.5
+COMMAND_RESPONSE_DELAY = 0.5
+RESPONSE_TIMEOUT = 2.0
+RESPONSE_EXTEND_TIMEOUT = 0.5
+POLL_INTERVAL = 0.05
+PRE_READ_DELAY = 0.1
+
+# 設備檢測關鍵字
+BLUETOOTH_KEYWORDS = ['bluetooth', 'bt ', '藍牙', '藍芽', '透過藍牙', '透過藍芽']
+SKIP_KEYWORDS = ['printer', 'modem', 'dialup', 'irda', '印表機', '數據機']
+ESP32_KEYWORDS = ["ESP32", "RYMCU", "USB", "Composite", "HID"]
+
+# HID 參數
+HID_PACKET_SIZE = 64
 
 # 檢查依賴
 try:

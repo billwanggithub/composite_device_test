@@ -19,8 +19,28 @@ import serial
 import serial.tools.list_ports
 import time
 import sys
+from typing import List, Optional, Tuple
 
-def list_ports_info():
+# ==================== 配置常數 ====================
+# 序列埠參數
+DEFAULT_BAUDRATE = 115200
+READ_TIMEOUT = 0.5  # 讀取 timeout（秒）
+WRITE_TIMEOUT = 1.0  # 寫入 timeout（秒）
+
+# 設備檢測參數
+DEVICE_STABILIZATION_DELAY = 0.5  # 等待設備穩定（秒）
+COMMAND_RESPONSE_DELAY = 0.5  # 發送命令後等待（秒）
+RESPONSE_TIMEOUT = 2.0  # 等待回應的總 timeout（秒）
+RESPONSE_EXTEND_TIMEOUT = 0.5  # 收到資料後延長 timeout（秒）
+POLL_INTERVAL = 0.05  # 輪詢間隔（秒）
+PRE_READ_DELAY = 0.1  # 發送命令後開始讀取前的延遲（秒）
+
+# 設備檢測關鍵字
+BLUETOOTH_KEYWORDS = ['bluetooth', 'bt ', '藍牙', '藍芽', '透過藍牙', '透過藍芽']
+SKIP_KEYWORDS = ['printer', 'modem', 'dialup', 'irda', '印表機', '數據機']
+ESP32_KEYWORDS = ["ESP32", "RYMCU", "USB", "Composite", "HID"]
+
+def list_ports_info() -> None:
     """列出所有 COM ports 的詳細資訊"""
     print("=" * 60)
     print("所有可用的 COM Ports:")
@@ -37,7 +57,7 @@ def list_ports_info():
         print(f"  VID:PID: {port.vid:04X}:{port.pid:04X}" if port.vid and port.pid else "  VID:PID: N/A")
         print(f"  序號: {port.serial_number}" if port.serial_number else "  序號: N/A")
 
-def find_esp32_device():
+def find_esp32_device() -> Optional[serial.Serial]:
     """掃描所有 COM ports，使用 *IDN? 命令找到 ESP32-S3 裝置"""
     print("\n" + "=" * 60)
     print("掃描 COM Ports (只掃描 USB CDC 裝置)")
@@ -54,8 +74,7 @@ def find_esp32_device():
         description = port.description.lower() if port.description else ""
 
         # 跳過藍牙裝置（支援中英文關鍵字）
-        bluetooth_keywords = ['bluetooth', 'bt ', '藍牙', '藍芽', '透過藍牙', '透過藍芽']
-        if any(keyword in description for keyword in bluetooth_keywords):
+        if any(keyword in description for keyword in BLUETOOTH_KEYWORDS):
             print(f"⏭️  跳過 {port_name} (藍牙裝置)")
             continue
 
@@ -65,8 +84,7 @@ def find_esp32_device():
             continue
 
         # 跳過其他非 CDC 裝置
-        skip_keywords = ['printer', 'modem', 'dialup', 'irda', '印表機', '數據機']
-        if any(keyword in description for keyword in skip_keywords):
+        if any(keyword in description for keyword in SKIP_KEYWORDS):
             print(f"⏭️  跳過 {port_name} (非 CDC 裝置)")
             continue
 
@@ -79,13 +97,13 @@ def find_esp32_device():
             print(f"  VID:PID: N/A")
 
         try:
-            # 嘗試開啟序列埠（115200 baud, DTR enabled, 設定 timeout）
+            # 嘗試開啟序列埠（DTR enabled, 設定 timeout）
             print(f"  開啟序列埠...")
             ser = serial.Serial(
                 port=port_name,
-                baudrate=115200,
-                timeout=0.5,  # 縮短讀取 timeout
-                write_timeout=1.0,  # 寫入 timeout
+                baudrate=DEFAULT_BAUDRATE,
+                timeout=READ_TIMEOUT,
+                write_timeout=WRITE_TIMEOUT,
                 rtscts=False
             )
 
@@ -95,7 +113,7 @@ def find_esp32_device():
 
             # 等待裝置穩定（給足夠時間讓設備識別 DTR 信號）
             print(f"  等待裝置穩定...")
-            time.sleep(0.5)  # 縮短等待時間
+            time.sleep(DEVICE_STABILIZATION_DELAY)
 
             # 清除緩衝區
             ser.reset_input_buffer()
@@ -106,25 +124,24 @@ def find_esp32_device():
             ser.write(b"*IDN?\n")
             ser.flush()
 
-            # 等待回應（總計最多 2 秒）
-            time.sleep(0.1)
+            # 等待回應
+            time.sleep(PRE_READ_DELAY)
 
             # 讀取回應
             response = ""
             start_time = time.time()
-            timeout_duration = 2.0  # 總 timeout 時間
 
-            while (time.time() - start_time) < timeout_duration:
+            while (time.time() - start_time) < RESPONSE_TIMEOUT:
                 if ser.in_waiting > 0:
                     line = ser.readline().decode('utf-8', errors='ignore').strip()
                     if line:
                         response += line + "\n"
                         # 檢查是否為 ESP32-S3
-                        if "ESP32" in line or "RYMCU" in line or "USB" in line or "Composite" in line or "HID" in line:
+                        if any(keyword in line for keyword in ESP32_KEYWORDS):
                             print(f"  ✅ 找到裝置！回應: {line}")
                             return ser  # 保持連線開啟
                 else:
-                    time.sleep(0.05)  # 短暫等待，避免過度消耗 CPU
+                    time.sleep(POLL_INTERVAL)  # 短暫等待，避免過度消耗 CPU
 
             # 沒有找到，關閉連線
             elapsed = time.time() - start_time
@@ -135,14 +152,16 @@ def find_esp32_device():
             ser.close()
 
         except serial.SerialException as e:
-            print(f"  ⚠️  無法開啟: {e}")
+            print(f"  ⚠️  序列埠錯誤: {e}")
+        except OSError as e:
+            print(f"  ⚠️  系統錯誤: {e}")
         except Exception as e:
-            print(f"  ⚠️  錯誤: {e}")
+            print(f"  ⚠️  未知錯誤: {e}")
 
     print("\n❌ 未找到 ESP32-S3 裝置\n")
     return None
 
-def send_command(ser, cmd):
+def send_command(ser: serial.Serial, cmd: str) -> List[str]:
     """發送命令並返回回應"""
     # 清除輸入緩衝區，但保留 DTR 狀態
     ser.reset_input_buffer()
@@ -152,23 +171,23 @@ def send_command(ser, cmd):
     ser.flush()
 
     # 等待設備處理命令
-    time.sleep(0.5)
+    time.sleep(COMMAND_RESPONSE_DELAY)
 
     response_lines = []
-    timeout = time.time() + 2.0
+    timeout = time.time() + RESPONSE_TIMEOUT
 
     while time.time() < timeout:
         if ser.in_waiting > 0:
             line = ser.readline().decode('utf-8', errors='ignore').strip()
             if line and line != ">":  # 忽略提示符
                 response_lines.append(line)
-                timeout = time.time() + 0.5  # 延長 timeout
+                timeout = time.time() + RESPONSE_EXTEND_TIMEOUT  # 延長 timeout
         else:
-            time.sleep(0.05)
+            time.sleep(POLL_INTERVAL)
 
     return response_lines
 
-def test_commands(ser):
+def test_commands(ser: serial.Serial) -> None:
     """測試各種命令"""
     print("\n" + "="*60)
     print("開始測試命令")
@@ -199,7 +218,7 @@ def test_commands(ser):
     print("測試完成")
     print("="*60)
 
-def interactive_mode(ser):
+def interactive_mode(ser: serial.Serial) -> None:
     """互動模式"""
     print("\n" + "="*60)
     print("進入互動模式")
@@ -230,7 +249,7 @@ def interactive_mode(ser):
     except KeyboardInterrupt:
         print("\n\n中斷！")
 
-def main():
+def main() -> None:
     print("=" * 60)
     print("ESP32-S3 CDC Serial 測試工具")
     print("=" * 60)
