@@ -1291,6 +1291,39 @@ python scripts/ble_client.py --scan
 - Check that `ARDUINO_USB_CDC_ON_BOOT=1` is set in build flags
 - Verify correct COM port in Device Manager
 
+### Both CDC and HID Not Working (CRITICAL FIX in commit 0a992ed)
+
+**Symptoms:**
+- No serial console output (CDC doesn't work)
+- HID reports not received or sent (HID doesn't work)
+- Device enumerates but no communication on either interface
+- Composite device appears in Device Manager but unresponsive
+
+**Root Cause:**
+Commits `ddcabc3` and `20fa1f9` attempted to replace explicit `USBCDC USBSerial` with Arduino's automatic `Serial` object (HWCDC type). However, the Arduino framework's CDC initialization was not working correctly, resulting in complete failure of both interfaces.
+
+**Solution (FIXED in commit 0a992ed):**
+The firmware has been reverted to use explicit `USBCDC USBSerial` instance which is the proven, working implementation. This ensures:
+- CDC interface initializes correctly and accepts commands
+- HID interface functions properly for 64-byte bidirectional communication
+- Both interfaces work simultaneously without conflicts
+
+**Code Changes:**
+1. `src/main.cpp`: Restored explicit `USBCDC USBSerial;` declaration and usage
+2. `src/CommandParser.h`: Changed `CDCResponse` to use `USBCDC&` instead of `HWCDC&`
+
+**Testing After Firmware Upload:**
+1. Physical disconnect/reconnect USB cable
+2. Check Device Manager for "ESP32-S3-DevKitC-1" with CDC and HID interfaces
+3. Verify CDC serial console appears in COM ports list
+4. Test CDC with `INFO` command
+5. Test HID with `python scripts/test_hid.py test`
+
+**If Issue Recurs:**
+- Do a complete clean rebuild: `pio run -t clean && pio run`
+- Erase flash if firmware fails to enumerate: `pio run -t erase` then `pio run -t upload`
+- Ensure USB cable supports data transfer (not charge-only)
+
 ### Build Warnings About CONFIG_TINYUSB_HID_BUFSIZE
 
 **Message:** `warning: "CONFIG_TINYUSB_HID_BUFSIZE" redefined`
