@@ -321,9 +321,10 @@ bool UART1Mux::setPWMFrequencyAndDuty(uint32_t frequency, float duty) {
 
     // Check if prescaler needs to change
     if (new_prescaler != pwmPrescaler) {
-        // Prescaler change required - must use high-level API (will stop PWM briefly)
-        Serial.printf("[UART1] ⚠️ Prescaler change required (%u → %u), brief PWM stop unavoidable\n",
+        // Prescaler change required - must use mcpwm_set_frequency() (immediate update, may glitch)
+        Serial.printf("[UART1] ⚠️ Prescaler change: %u → %u (using mcpwm_set_frequency - immediate update)\n",
                      pwmPrescaler, new_prescaler);
+        Serial.printf("[UART1] 🔍 Period change: %u → %u ticks\n", pwmPeriod, new_period);
 
         esp_err_t err_freq = mcpwm_set_frequency(MCPWM_UNIT_UART1_PWM, MCPWM_TIMER_UART1_PWM, frequency);
         if (err_freq != ESP_OK) {
@@ -347,7 +348,11 @@ bool UART1Mux::setPWMFrequencyAndDuty(uint32_t frequency, float duty) {
         Serial.printf("[UART1] PWM updated: %u Hz, %.1f%% (prescaler=%u, period=%u)\n",
                      frequency, duty, pwmPrescaler, pwmPeriod);
     } else {
-        // Same prescaler - update period and duty using LL API (no PWM stop!)
+        // Same prescaler - only duty update needed (TEZ-synchronized, glitch-free)
+        Serial.printf("[UART1] ✅ Same prescaler=%u, only updating duty (TEZ-synchronized)\n", pwmPrescaler);
+        Serial.printf("[UART1] 🔍 Period: %u → %u ticks, Duty: %.1f%% → %.1f%%\n",
+                     pwmPeriod, new_period, pwmDuty, duty);
+
         updatePWMRegistersDirectly(new_period, duty);
 
         // Update stored values
@@ -355,8 +360,7 @@ bool UART1Mux::setPWMFrequencyAndDuty(uint32_t frequency, float duty) {
         pwmFrequency = frequency;
         pwmDuty = duty;
 
-        Serial.printf("[UART1] PWM updated (no-stop, LL API): %u Hz, %.1f%% (period=%u)\n",
-                     frequency, duty, pwmPeriod);
+        Serial.printf("[UART1] ✅ PWM updated (glitch-free): %u Hz, %.1f%%\n", frequency, duty);
     }
 
     return true;
