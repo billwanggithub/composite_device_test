@@ -35,13 +35,21 @@ This is by design for better debugging/monitoring!
 import argparse
 import asyncio
 import sys
+from typing import Optional
 from bleak import BleakScanner, BleakClient
+from bleak.exc import BleakError
 
+# ==================== 配置常數 ====================
+# BLE GATT Service and Characteristic UUIDs
 SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-CHAR_UUID_RX = "beb5483e-36e1-4688-b7f5-ea07361b26a8"  # write
-CHAR_UUID_TX = "beb5483e-36e1-4688-b7f5-ea07361b26a9"  # notify
+CHAR_UUID_RX = "beb5483e-36e1-4688-b7f5-ea07361b26a8"  # Write (RX on device)
+CHAR_UUID_TX = "beb5483e-36e1-4688-b7f5-ea07361b26a9"  # Notify (TX from device)
 
-async def scan_devices(timeout=8.0):
+# Scan and connection timeouts
+DEFAULT_SCAN_TIMEOUT = 8.0  # Seconds to scan for BLE devices
+CONNECTION_RETRY_DELAY = 1.0  # Delay before retrying connection (if needed)
+
+async def scan_devices(timeout: float = DEFAULT_SCAN_TIMEOUT) -> None:
     """Scan for all BLE devices and display them"""
     print(f"Scanning for BLE devices (timeout: {timeout}s)...")
     print("=" * 60)
@@ -61,14 +69,16 @@ async def scan_devices(timeout=8.0):
         print()
     print("=" * 60)
 
-async def scan_for_name(name, timeout=8.0):
+async def scan_for_name(name: str, timeout: float = DEFAULT_SCAN_TIMEOUT) -> Optional[str]:
+    """Scan for BLE device by name substring match"""
     devices = await BleakScanner.discover(timeout=timeout)
     for d in devices:
         if d.name and name in d.name:
             return d.address
     return None
 
-async def run(address=None, name=None):
+async def run(address: Optional[str] = None, name: Optional[str] = None) -> None:
+    """Connect to BLE device and handle interactive communication"""
     if not address and name:
         print(f"Scanning for BLE device with name containing: {name}...")
         address = await scan_for_name(name)
@@ -88,10 +98,12 @@ async def run(address=None, name=None):
         print(f"Connected to {address}")
 
         # notification handler
-        def handle_notification(sender, data: bytearray):
+        def handle_notification(sender: int, data: bytearray) -> None:
+            """Handle incoming BLE notifications from TX characteristic"""
             try:
                 text = data.decode("utf-8", errors="replace")
-            except Exception:
+            except UnicodeDecodeError:
+                # Fallback to hex representation if decode fails
                 text = repr(data)
             # Print and flush so user sees messages immediately
             print(text, end="", flush=True)
@@ -117,9 +129,12 @@ async def run(address=None, name=None):
                     line = line + "\n"
                 try:
                     await client.write_gatt_char(CHAR_UUID_RX, line.encode("utf-8"), response=False)
-                except Exception as e:
-                    print(f"Write error: {e}")
+                except BleakError as e:
+                    print(f"BLE write error: {e}")
                     break
+                except UnicodeEncodeError as e:
+                    print(f"Unicode encode error: {e}")
+                    continue  # Skip this line but continue running
         except KeyboardInterrupt:
             print("\nInterrupted by user")
         finally:
@@ -140,5 +155,12 @@ if __name__ == "__main__":
         else:
             # Connect to device
             asyncio.run(run(address=args.address, name=args.name))
+    except BleakError as e:
+        print(f"BLE error: {e}")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print("\nInterrupted by user")
+        sys.exit(0)
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Unexpected error: {e}")
+        sys.exit(1)
