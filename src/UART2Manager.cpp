@@ -1,4 +1,9 @@
 #include "UART2Manager.h"
+#include "USBCDC.h"
+
+// External reference to USBSerial (defined in main.cpp)
+extern USBCDC USBSerial;
+
 #include "driver/gpio.h"
 
 UART2Manager::UART2Manager() {
@@ -35,7 +40,7 @@ bool UART2Manager::begin(uint32_t baudRate, uart_stop_bits_t stopBits,
     // Configure UART parameters
     esp_err_t err = uart_param_config(uartNum, &uart_config);
     if (err != ESP_OK) {
-        Serial.printf("[UART2] uart_param_config failed: %d\n", err);
+        USBSerial.printf("[UART2] uart_param_config failed: %d\n", err);
         return false;
     }
 
@@ -43,7 +48,7 @@ bool UART2Manager::begin(uint32_t baudRate, uart_stop_bits_t stopBits,
     err = uart_set_pin(uartNum, PIN_UART2_TX, PIN_UART2_RX,
                       UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     if (err != ESP_OK) {
-        Serial.printf("[UART2] uart_set_pin failed: %d\n", err);
+        USBSerial.printf("[UART2] uart_set_pin failed: %d\n", err);
         return false;
     }
 
@@ -54,7 +59,7 @@ bool UART2Manager::begin(uint32_t baudRate, uart_stop_bits_t stopBits,
     // Install UART driver with buffers
     err = uart_driver_install(uartNum, rxBufferSize, txBufferSize, 0, NULL, 0);
     if (err != ESP_OK) {
-        Serial.printf("[UART2] uart_driver_install failed: %d\n", err);
+        USBSerial.printf("[UART2] uart_driver_install failed: %d\n", err);
         return false;
     }
 
@@ -67,7 +72,7 @@ bool UART2Manager::begin(uint32_t baudRate, uart_stop_bits_t stopBits,
     rxBufSize = rxBufferSize;
     initialized = true;
 
-    Serial.printf("[UART2] Initialized: %u baud, %d data bits, %d stop bits\n",
+    USBSerial.printf("[UART2] Initialized: %u baud, %d data bits, %d stop bits\n",
                   baudRate, dataBits + 5, stopBits + 1);
 
     return true;
@@ -81,7 +86,7 @@ void UART2Manager::end() {
     uart_driver_delete(uartNum);
     initialized = false;
 
-    Serial.println("[UART2] Shutdown complete");
+    USBSerial.println("[UART2] Shutdown complete");
 }
 
 bool UART2Manager::reconfigure(uint32_t baudRate, uart_stop_bits_t stopBits,
@@ -111,7 +116,7 @@ bool UART2Manager::reconfigure(uint32_t baudRate, uart_stop_bits_t stopBits,
 
     esp_err_t err = uart_param_config(uartNum, &uart_config);
     if (err != ESP_OK) {
-        Serial.printf("[UART2] Reconfigure failed: %d\n", err);
+        USBSerial.printf("[UART2] Reconfigure failed: %d\n", err);
         return false;
     }
 
@@ -121,7 +126,7 @@ bool UART2Manager::reconfigure(uint32_t baudRate, uart_stop_bits_t stopBits,
     currentParity = parity;
     currentDataBits = dataBits;
 
-    Serial.printf("[UART2] Reconfigured: %u baud, %d data bits, %d stop bits\n",
+    USBSerial.printf("[UART2] Reconfigured: %u baud, %d data bits, %d stop bits\n",
                   baudRate, dataBits + 5, stopBits + 1);
 
     return true;
@@ -265,25 +270,25 @@ bool UART2Manager::validateConfig(uint32_t baudRate, uart_stop_bits_t stopBits,
                                   uart_parity_t parity, uart_word_length_t dataBits) {
     // Validate baud rate
     if (!isValidBaudRate(baudRate)) {
-        Serial.printf("[UART2] Invalid baud rate: %u (valid: 2400-1500000)\n", baudRate);
+        USBSerial.printf("[UART2] Invalid baud rate: %u (valid: 2400-1500000)\n", baudRate);
         return false;
     }
 
     // Validate stop bits
     if (stopBits < UART_STOP_BITS_1 || stopBits > UART_STOP_BITS_2) {
-        Serial.printf("[UART2] Invalid stop bits: %d\n", stopBits);
+        USBSerial.printf("[UART2] Invalid stop bits: %d\n", stopBits);
         return false;
     }
 
     // Validate parity
     if (parity < UART_PARITY_DISABLE || parity > UART_PARITY_ODD) {
-        Serial.printf("[UART2] Invalid parity: %d\n", parity);
+        USBSerial.printf("[UART2] Invalid parity: %d\n", parity);
         return false;
     }
 
     // Validate data bits
     if (dataBits < UART_DATA_5_BITS || dataBits > UART_DATA_8_BITS) {
-        Serial.printf("[UART2] Invalid data bits: %d\n", dataBits);
+        USBSerial.printf("[UART2] Invalid data bits: %d\n", dataBits);
         return false;
     }
 

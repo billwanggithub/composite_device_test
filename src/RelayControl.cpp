@@ -1,4 +1,9 @@
 #include "RelayControl.h"
+#include "USBCDC.h"
+
+// External reference to USBSerial (defined in main.cpp)
+extern USBCDC USBSerial;
+
 
 RelayControl::RelayControl() {
 }
@@ -23,7 +28,7 @@ bool RelayControl::begin(bool initialState) {
 
     initialized = true;
 
-    Serial.printf("[Relay] Initialized: Initial state = %s\n", currentState ? "ON" : "OFF");
+    USBSerial.printf("[Relay] Initialized: Initial state = %s\n", currentState ? "ON" : "OFF");
 
     return true;
 }
@@ -36,7 +41,7 @@ void RelayControl::setState(bool state) {
     currentState = state;
     gpio_set_level((gpio_num_t)PIN_RELAY_CONTROL, state ? 1 : 0);
 
-    Serial.printf("[Relay] State changed: %s\n", state ? "ON" : "OFF");
+    USBSerial.printf("[Relay] State changed: %s\n", state ? "ON" : "OFF");
 }
 
 void RelayControl::toggle() {

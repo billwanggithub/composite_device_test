@@ -1,4 +1,8 @@
 #include "BuzzerControl.h"
+#include "USBCDC.h"
+
+// External reference to USBSerial (defined in main.cpp)
+extern USBCDC USBSerial;
 
 BuzzerControl::BuzzerControl() {
 }
@@ -24,7 +28,7 @@ bool BuzzerControl::begin(uint32_t frequency, float duty) {
 
     esp_err_t err = ledc_timer_config(&timer_conf);
     if (err != ESP_OK) {
-        Serial.printf("[Buzzer] Timer config failed: %d\n", err);
+        USBSerial.printf("[Buzzer] Timer config failed: %d\n", err);
         return false;
     }
 
@@ -41,7 +45,7 @@ bool BuzzerControl::begin(uint32_t frequency, float duty) {
 
     err = ledc_channel_config(&channel_conf);
     if (err != ESP_OK) {
-        Serial.printf("[Buzzer] Channel config failed: %d\n", err);
+        USBSerial.printf("[Buzzer] Channel config failed: %d\n", err);
         return false;
     }
 
@@ -50,7 +54,7 @@ bool BuzzerControl::begin(uint32_t frequency, float duty) {
     buzzerEnabled = false;  // Start disabled
     initialized = true;
 
-    Serial.printf("[Buzzer] Initialized: %u Hz, %.1f%% duty\n", frequency, duty);
+    USBSerial.printf("[Buzzer] Initialized: %u Hz, %.1f%% duty\n", frequency, duty);
 
     return true;
 }
@@ -75,7 +79,7 @@ bool BuzzerControl::setFrequency(uint32_t frequency) {
 
     esp_err_t err = ledc_timer_config(&timer_conf);
     if (err != ESP_OK) {
-        Serial.printf("[Buzzer] Frequency set failed: %d\n", err);
+        USBSerial.printf("[Buzzer] Frequency set failed: %d\n", err);
         return false;
     }
 
@@ -195,7 +199,7 @@ void BuzzerControl::stop() {
 
 bool BuzzerControl::validateFrequency(uint32_t frequency) {
     if (frequency < 10 || frequency > 20000) {
-        Serial.printf("[Buzzer] Invalid frequency: %u (valid: 10-20000 Hz)\n", frequency);
+        USBSerial.printf("[Buzzer] Invalid frequency: %u (valid: 10-20000 Hz)\n", frequency);
         return false;
     }
     return true;
@@ -203,7 +207,7 @@ bool BuzzerControl::validateFrequency(uint32_t frequency) {
 
 bool BuzzerControl::validateDuty(float duty) {
     if (duty < 0.0 || duty > 100.0) {
-        Serial.printf("[Buzzer] Invalid duty: %.1f (valid: 0-100%%)\n", duty);
+        USBSerial.printf("[Buzzer] Invalid duty: %.1f (valid: 0-100%%)\n", duty);
         return false;
     }
     return true;

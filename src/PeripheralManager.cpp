@@ -1,81 +1,86 @@
 #include "PeripheralManager.h"
+#include "USBCDC.h"
+
+// External reference to USBSerial (defined in main.cpp)
+extern USBCDC USBSerial;
+
 
 PeripheralManager::PeripheralManager() {
 }
 
 bool PeripheralManager::begin() {
     // Motor control is now integrated into UART1Mux
-    Serial.println("\n=== Initializing Peripherals ===");
+    USBSerial.println("\n=== Initializing Peripherals ===");
 
     // Initialize UART1 (start in disabled mode)
-    Serial.print("[PeripheralManager] UART1... ");
+    USBSerial.print("[PeripheralManager] UART1... ");
     uart1.disable();
-    Serial.println("OK (disabled)");
+    USBSerial.println("OK (disabled)");
 
     // Initialize UART2
-    Serial.print("[PeripheralManager] UART2... ");
+    USBSerial.print("[PeripheralManager] UART2... ");
     if (!uart2.begin(115200)) {
-        Serial.println("FAILED");
+        USBSerial.println("FAILED");
         return false;
     }
-    Serial.println("OK");
+    USBSerial.println("OK");
 
     // Initialize User Keys
-    Serial.print("[PeripheralManager] User Keys... ");
+    USBSerial.print("[PeripheralManager] User Keys... ");
     if (!keys.begin(50, 500, 100)) {  // 50ms debounce, 500ms long press, 100ms repeat
-        Serial.println("FAILED");
+        USBSerial.println("FAILED");
         return false;
     }
-    Serial.println("OK");
+    USBSerial.println("OK");
 
     // Initialize Buzzer
-    Serial.print("[PeripheralManager] Buzzer... ");
+    USBSerial.print("[PeripheralManager] Buzzer... ");
     if (!buzzer.begin(2000, 50.0)) {  // 2kHz, 50% duty
-        Serial.println("FAILED");
+        USBSerial.println("FAILED");
         return false;
     }
-    Serial.println("OK");
+    USBSerial.println("OK");
 
     // Initialize LED PWM
-    Serial.print("[PeripheralManager] LED PWM... ");
+    USBSerial.print("[PeripheralManager] LED PWM... ");
     if (!ledPWM.begin(1000, 50.0)) {  // 1kHz, 50% brightness
-        Serial.println("FAILED");
+        USBSerial.println("FAILED");
         return false;
     }
-    Serial.println("OK");
+    USBSerial.println("OK");
 
     // Initialize Relay
-    Serial.print("[PeripheralManager] Relay... ");
+    USBSerial.print("[PeripheralManager] Relay... ");
     if (!relay.begin(false)) {  // Start OFF
-        Serial.println("FAILED");
+        USBSerial.println("FAILED");
         return false;
     }
-    Serial.println("OK");
+    USBSerial.println("OK");
 
     // Initialize General GPIO
-    Serial.print("[PeripheralManager] GPIO Output... ");
+    USBSerial.print("[PeripheralManager] GPIO Output... ");
     if (!gpioOut.begin(false)) {  // Start LOW
-        Serial.println("FAILED");
+        USBSerial.println("FAILED");
         return false;
     }
-    Serial.println("OK");
+    USBSerial.println("OK");
 
     allInitialized = true;
 
-    Serial.println("=================================");
-    Serial.println("✅ All peripherals initialized successfully");
-    Serial.println();
-    Serial.println("Peripheral Summary:");
-    Serial.println("  • UART1: GPIO 17 (TX), GPIO 18 (RX) - Multiplexable");
-    Serial.println("  • UART2: GPIO 43 (TX), GPIO 44 (RX) - Standard");
-    Serial.println("  • Buzzer: GPIO 13 - PWM (10Hz-20kHz)");
-    Serial.println("  • LED PWM: GPIO 14 - Brightness control");
-    Serial.println("  • Relay: GPIO 21 - HIGH active");
-    Serial.println("  • GPIO Out: GPIO 41 - General purpose");
-    Serial.println("  • Key 1: GPIO 1 - Duty/Freq increase");
-    Serial.println("  • Key 2: GPIO 2 - Duty/Freq decrease");
-    Serial.println("  • Key 3: GPIO 42 - Enter/Start (future)");
-    Serial.println("=================================\n");
+    USBSerial.println("=================================");
+    USBSerial.println("✅ All peripherals initialized successfully");
+    USBSerial.println();
+    USBSerial.println("Peripheral Summary:");
+    USBSerial.println("  • UART1: GPIO 17 (TX), GPIO 18 (RX) - Multiplexable");
+    USBSerial.println("  • UART2: GPIO 43 (TX), GPIO 44 (RX) - Standard");
+    USBSerial.println("  • Buzzer: GPIO 13 - PWM (10Hz-20kHz)");
+    USBSerial.println("  • LED PWM: GPIO 14 - Brightness control");
+    USBSerial.println("  • Relay: GPIO 21 - HIGH active");
+    USBSerial.println("  • GPIO Out: GPIO 41 - General purpose");
+    USBSerial.println("  • Key 1: GPIO 1 - Duty/Freq increase");
+    USBSerial.println("  • Key 2: GPIO 2 - Duty/Freq decrease");
+    USBSerial.println("  • Key 3: GPIO 42 - Enter/Start (future)");
+    USBSerial.println("=================================\n");
 
     return true;
 }
@@ -108,7 +113,7 @@ void PeripheralManager::setStepSizes(float dutyStep, uint32_t frequencyStep) {
         frequencyStepSize = frequencyStep;
     }
 
-    Serial.printf("[PeripheralManager] Step sizes: Duty=%.2f%%, Freq=%u Hz\n",
+    USBSerial.printf("[PeripheralManager] Step sizes: Duty=%.2f%%, Freq=%u Hz\n",
                   dutyStepSize, frequencyStepSize);
 }
 
@@ -185,7 +190,7 @@ void PeripheralManager::handleKeyEvents() {
     } else if (event1 == UserKeys::EVENT_LONG_PRESS) {
         // Long press: Switch between duty and frequency adjustment
         keyControlAdjustsDuty = !keyControlAdjustsDuty;
-        Serial.printf("[Keys] Switched to %s adjustment\n",
+        USBSerial.printf("[Keys] Switched to %s adjustment\n",
                      keyControlAdjustsDuty ? "DUTY" : "FREQUENCY");
         // Optional: Beep to confirm mode change
         buzzer.beep(1000, 100);
@@ -203,7 +208,7 @@ void PeripheralManager::handleKeyEvents() {
         // Long press: Emergency stop
         uart1.setPWMEnabled(false);
         uart1.setPWMDuty(0.0);
-        Serial.println("[Keys] EMERGENCY STOP triggered by Key 2");
+        USBSerial.println("[Keys] EMERGENCY STOP triggered by Key 2");
         // Triple beep to indicate emergency stop
         buzzer.beep(2000, 100);
         delay(50);
@@ -215,14 +220,14 @@ void PeripheralManager::handleKeyEvents() {
     // Check Key 3 (Enter/Start) - Future use
     UserKeys::KeyEvent event3 = keys.getEvent(UserKeys::KEY3);
     if (event3 == UserKeys::EVENT_SHORT_PRESS) {
-        Serial.println("[Keys] Key 3 pressed (reserved for future use)");
+        USBSerial.println("[Keys] Key 3 pressed (reserved for future use)");
         // Optional: Beep acknowledgment
         buzzer.beep(1500, 50);
     } else if (event3 == UserKeys::EVENT_LONG_PRESS) {
         // Long press Key 3: Clear emergency stop
         if (!uart1.isPWMEnabled()) {
             uart1.setPWMEnabled(true);
-            Serial.println("[Keys] Emergency stop CLEARED by Key 3");
+            USBSerial.println("[Keys] Emergency stop CLEARED by Key 3");
             // Confirmation beep
             buzzer.beep(1000, 200);
         }
@@ -240,7 +245,7 @@ void PeripheralManager::adjustMotorDuty(bool increase) {
 
     if (newDuty != currentDuty) {
         uart1.setPWMDuty(newDuty);
-        Serial.printf("[Keys] Duty adjusted: %.1f%% → %.1f%%\n", currentDuty, newDuty);
+        USBSerial.printf("[Keys] Duty adjusted: %.1f%% → %.1f%%\n", currentDuty, newDuty);
     }
 }
 
@@ -255,7 +260,7 @@ void PeripheralManager::adjustMotorFrequency(bool increase) {
 
     if ((uint32_t)newFreq != currentFreq) {
         uart1.setPWMFrequency((uint32_t)newFreq);
-        Serial.printf("[Keys] Frequency adjusted: %u Hz → %u Hz\n", currentFreq, (uint32_t)newFreq);
+        USBSerial.printf("[Keys] Frequency adjusted: %u Hz → %u Hz\n", currentFreq, (uint32_t)newFreq);
     }
 }
 
@@ -265,20 +270,20 @@ void PeripheralManager::adjustMotorFrequency(bool increase) {
 
 bool PeripheralManager::beginSettings() {
     if (!settingsManager.begin()) {
-        Serial.println("[PeripheralManager] Failed to initialize settings manager");
+        USBSerial.println("[PeripheralManager] Failed to initialize settings manager");
         return false;
     }
-    Serial.println("[PeripheralManager] Settings manager initialized");
+    USBSerial.println("[PeripheralManager] Settings manager initialized");
     return true;
 }
 
 bool PeripheralManager::loadSettings() {
     if (!settingsManager.load()) {
-        Serial.println("[PeripheralManager] Failed to load settings");
+        USBSerial.println("[PeripheralManager] Failed to load settings");
         return false;
     }
 
-    Serial.println("[PeripheralManager] Settings loaded successfully");
+    USBSerial.println("[PeripheralManager] Settings loaded successfully");
     return true;
 }
 
@@ -330,30 +335,30 @@ bool PeripheralManager::saveSettings() {
 
     // Save to NVS
     if (!settingsManager.save()) {
-        Serial.println("[PeripheralManager] Failed to save settings");
+        USBSerial.println("[PeripheralManager] Failed to save settings");
         return false;
     }
 
-    Serial.println("[PeripheralManager] Settings saved successfully");
+    USBSerial.println("[PeripheralManager] Settings saved successfully");
     return true;
 }
 
 bool PeripheralManager::applySettings() {
     const PeripheralSettings& settings = settingsManager.get();
 
-    Serial.println("[PeripheralManager] Applying settings to peripherals...");
+    USBSerial.println("[PeripheralManager] Applying settings to peripherals...");
 
     // UART1 mode is NOT applied from NVS settings
     // It always defaults to PWM/RPM mode at startup (set in main.cpp)
     // and can only be changed via commands (UART1 MODE <UART|PWM|OFF>)
     // This ensures UART1 always starts in PWM/RPM mode regardless of saved settings
-    Serial.println("[PeripheralManager] UART1: Mode not applied (uses startup default PWM/RPM)");
+    USBSerial.println("[PeripheralManager] UART1: Mode not applied (uses startup default PWM/RPM)");
 
     // Apply Buzzer settings
     buzzer.setFrequency(settings.buzzerFreq);
     buzzer.setDuty(settings.buzzerDuty);
     buzzer.enable(settings.buzzerEnabled);
-    Serial.printf("[PeripheralManager] Buzzer: %u Hz, %.1f%%, %s\n",
+    USBSerial.printf("[PeripheralManager] Buzzer: %u Hz, %.1f%%, %s\n",
         settings.buzzerFreq, settings.buzzerDuty,
         settings.buzzerEnabled ? "enabled" : "disabled");
 
@@ -361,13 +366,13 @@ bool PeripheralManager::applySettings() {
     ledPWM.setFrequency(settings.ledPwmFreq);
     ledPWM.setBrightness(settings.ledBrightness);
     ledPWM.enable(settings.ledEnabled);
-    Serial.printf("[PeripheralManager] LED PWM: %u Hz, %.1f%%, %s\n",
+    USBSerial.printf("[PeripheralManager] LED PWM: %u Hz, %.1f%%, %s\n",
         settings.ledPwmFreq, settings.ledBrightness,
         settings.ledEnabled ? "enabled" : "disabled");
 
     // Apply Relay settings
     relay.setState(settings.relayState);
-    Serial.printf("[PeripheralManager] Relay: %s\n", settings.relayState ? "ON" : "OFF");
+    USBSerial.printf("[PeripheralManager] Relay: %s\n", settings.relayState ? "ON" : "OFF");
 
     // Apply GPIO settings
     if (settings.gpioState) {
@@ -375,23 +380,23 @@ bool PeripheralManager::applySettings() {
     } else {
         gpioOut.setLow();
     }
-    Serial.printf("[PeripheralManager] GPIO: %s\n", settings.gpioState ? "HIGH" : "LOW");
+    USBSerial.printf("[PeripheralManager] GPIO: %s\n", settings.gpioState ? "HIGH" : "LOW");
 
     // Apply key control settings
     keyControlAdjustsDuty = settings.keyControlAdjustDuty;
     dutyStepSize = settings.keyDutyStep;
     frequencyStepSize = settings.keyFreqStep;
     keyControlEnabled = settings.keyControlEnabled;
-    Serial.printf("[PeripheralManager] Key Control: %s mode, duty step=%.1f%%, freq step=%u Hz, %s\n",
+    USBSerial.printf("[PeripheralManager] Key Control: %s mode, duty step=%.1f%%, freq step=%u Hz, %s\n",
         settings.keyControlAdjustDuty ? "duty" : "frequency",
         settings.keyDutyStep, settings.keyFreqStep,
         settings.keyControlEnabled ? "enabled" : "disabled");
 
-    Serial.println("[PeripheralManager] All settings applied successfully");
+    USBSerial.println("[PeripheralManager] All settings applied successfully");
     return true;
 }
 
 void PeripheralManager::resetSettings() {
     settingsManager.reset();
-    Serial.println("[PeripheralManager] Settings reset to defaults");
+    USBSerial.println("[PeripheralManager] Settings reset to defaults");
 }

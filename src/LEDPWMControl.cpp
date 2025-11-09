@@ -1,4 +1,9 @@
 #include "LEDPWMControl.h"
+#include "USBCDC.h"
+
+// External reference to USBSerial (defined in main.cpp)
+extern USBCDC USBSerial;
+
 
 LEDPWMControl::LEDPWMControl() {
 }
@@ -24,7 +29,7 @@ bool LEDPWMControl::begin(uint32_t frequency, float brightness) {
 
     esp_err_t err = ledc_timer_config(&timer_conf);
     if (err != ESP_OK) {
-        Serial.printf("[LED_PWM] Timer config failed: %d\n", err);
+        USBSerial.printf("[LED_PWM] Timer config failed: %d\n", err);
         return false;
     }
 
@@ -41,7 +46,7 @@ bool LEDPWMControl::begin(uint32_t frequency, float brightness) {
 
     err = ledc_channel_config(&channel_conf);
     if (err != ESP_OK) {
-        Serial.printf("[LED_PWM] Channel config failed: %d\n", err);
+        USBSerial.printf("[LED_PWM] Channel config failed: %d\n", err);
         return false;
     }
 
@@ -50,7 +55,7 @@ bool LEDPWMControl::begin(uint32_t frequency, float brightness) {
     ledEnabled = false;  // Start disabled
     initialized = true;
 
-    Serial.printf("[LED_PWM] Initialized: %u Hz, %.1f%% brightness\n", frequency, brightness);
+    USBSerial.printf("[LED_PWM] Initialized: %u Hz, %.1f%% brightness\n", frequency, brightness);
 
     return true;
 }
@@ -75,7 +80,7 @@ bool LEDPWMControl::setFrequency(uint32_t frequency) {
 
     esp_err_t err = ledc_timer_config(&timer_conf);
     if (err != ESP_OK) {
-        Serial.printf("[LED_PWM] Frequency set failed: %d\n", err);
+        USBSerial.printf("[LED_PWM] Frequency set failed: %d\n", err);
         return false;
     }
 
@@ -185,7 +190,7 @@ void LEDPWMControl::stop() {
 
 bool LEDPWMControl::validateFrequency(uint32_t frequency) {
     if (frequency < 100 || frequency > 20000) {
-        Serial.printf("[LED_PWM] Invalid frequency: %u (valid: 100-20000 Hz)\n", frequency);
+        USBSerial.printf("[LED_PWM] Invalid frequency: %u (valid: 100-20000 Hz)\n", frequency);
         return false;
     }
     return true;
@@ -193,7 +198,7 @@ bool LEDPWMControl::validateFrequency(uint32_t frequency) {
 
 bool LEDPWMControl::validateBrightness(float brightness) {
     if (brightness < 0.0 || brightness > 100.0) {
-        Serial.printf("[LED_PWM] Invalid brightness: %.1f (valid: 0-100%%)\n", brightness);
+        USBSerial.printf("[LED_PWM] Invalid brightness: %.1f (valid: 0-100%%)\n", brightness);
         return false;
     }
     return true;
