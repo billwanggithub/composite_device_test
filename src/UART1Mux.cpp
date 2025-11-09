@@ -824,17 +824,31 @@ void UART1Mux::updatePWMRegistersDirectly(uint32_t period, float duty) {
         //   bits [23:8] = period
         //   bit  [24]   = period_upmethod (1 = shadow register mode)
 
+        // Read register BEFORE write for debugging
+        uint32_t cfg0_before = MCPWM1.timer[0].timer_cfg0.val;
+        Serial.printf("[UART1] 📖 BEFORE: cfg0=0x%08X, prescaler=%u, period=%u\n",
+                     cfg0_before, (cfg0_before & 0xFF), ((cfg0_before >> 8) & 0xFFFF));
+
         // Build the complete register value with prescaler + period + shadow mode
         uint32_t cfg0_val = (pwmPrescaler & 0xFF)      // Prescaler [7:0]
                           | (period << 8)               // Period [23:8]
                           | (1 << 24);                  // Shadow mode [24]
 
+        Serial.printf("[UART1] 🔧 Writing: prescaler=%u, period=%u, cfg0_val=0x%08X\n",
+                     pwmPrescaler, period, cfg0_val);
+
         // Write complete value to register
         MCPWM1.timer[0].timer_cfg0.val = cfg0_val;
 
-        // Debug output
-        Serial.printf("[UART1] 🔧 Register write: prescaler=%u, period=%u, cfg0_val=0x%08X\n",
-                     pwmPrescaler, period, cfg0_val);
+        // Read register AFTER write to verify
+        uint32_t cfg0_after = MCPWM1.timer[0].timer_cfg0.val;
+        Serial.printf("[UART1] 📖 AFTER:  cfg0=0x%08X, prescaler=%u, period=%u\n",
+                     cfg0_after, (cfg0_after & 0xFF), ((cfg0_after >> 8) & 0xFFFF));
+
+        // Verify calculation
+        uint32_t calculated_freq = 80000000 / (pwmPrescaler * period);
+        Serial.printf("[UART1] 🧮 Expected frequency: 80MHz / (%u × %u) = %u Hz\n",
+                     pwmPrescaler, period, calculated_freq);
 
         // Update stored period value
         pwmPeriod = period;
