@@ -773,50 +773,38 @@ void UART1Mux::calculatePWMParameters(uint32_t frequency, uint32_t& prescaler, u
 }
 
 void UART1Mux::updatePWMRegistersDirectly(uint32_t period, float duty) {
-    // DIRECT REGISTER ACCESS FOR TRULY GLITCH-FREE UPDATES
+    // HYBRID APPROACH: Direct register for period, high-level API for duty
     //
-    // ESP32-S3 MCPWM Register Structure (MCPWM Unit 1, Timer 0):
-    // - MCPWM_TIMER0_CFG0_REG contains both prescaler [7:0] and period [23:8]
-    // - MCPWM_GEN0_CMPR_VALUE_A_REG contains comparator A value [15:0]
-    // - When TIMER_PERIOD_UPMETHOD=1, period uses shadow register (updates at TEZ)
+    // Rationale:
+    // 1. Period register location is well-defined in timer_cfg0
+    // 2. Comparator register structure varies across ESP-IDF versions
+    // 3. mcpwm_set_duty() already uses shadow register (no stop)
     //
-    // Key principle: We ONLY call this function when prescaler is unchanged
-    // Therefore we can safely update period register without stopping timer
+    // Strategy:
+    // - Update period via direct register access (shadow register with UPMETHOD=1)
+    // - Update duty via mcpwm_set_duty() (proven to work, uses shadow register)
+    // - Both update at next TEZ event, completely glitch-free
 
-    // Calculate comparator value from duty cycle
-    uint32_t cmpr_val = (uint32_t)((duty / 100.0) * period);
-    if (cmpr_val > period) {
-        cmpr_val = period;
-    }
-
-    // Direct register access - bypasses all ESP-IDF driver code
     taskENTER_CRITICAL(&mux);
 
-    // Access MCPWM1 timer[0] registers directly
-    // timer_cfg0 structure in mcpwm_struct.h:
-    // - prescale: bits 7:0
-    // - period: bits 23:8
-    // - period_upmethod: bit 24
-    // We preserve prescale, update period, ensure period_upmethod=1
+    // Update period register directly (only if it changed)
+    if (period != pwmPeriod) {
+        // Read current CFG0 register value
+        uint32_t cfg0_val = MCPWM1.timer[0].timer_cfg0.val;
 
-    // Read current CFG0 register value
-    uint32_t cfg0_val = MCPWM1.timer[0].timer_cfg0.val;
+        // Clear period bits [23:8] and period_upmethod bit [24]
+        cfg0_val &= 0xFE0000FF;  // Preserve prescaler [7:0] and other bits
 
-    // Clear period bits [23:8] and period_upmethod bit [24]
-    cfg0_val &= 0xFE0000FF;  // Preserve prescaler [7:0] and other bits
+        // Set new period [23:8] and enable shadow register mode [24]
+        cfg0_val |= (period << 8) | (1 << 24);
 
-    // Set new period [23:8] and enable shadow register mode [24]
-    cfg0_val |= (period << 8) | (1 << 24);
+        // Write back to register
+        MCPWM1.timer[0].timer_cfg0.val = cfg0_val;
+    }
 
-    // Write back to register
-    MCPWM1.timer[0].timer_cfg0.val = cfg0_val;
-
-    // Update comparator A value (duty cycle)
-    // This register also has shadow register mechanism
-    MCPWM1.timer[0].cmpr_value[0].val = cmpr_val;
-
-    // No need to manually trigger sync - shadow registers automatically
-    // load at next TEZ (Timer Equals Zero) event
+    // Update duty cycle using high-level API (uses shadow register, no stop)
+    mcpwm_set_duty(MCPWM_UNIT_UART1_PWM, MCPWM_TIMER_UART1_PWM,
+                   MCPWM_GEN_UART1_PWM, duty);
 
     taskEXIT_CRITICAL(&mux);
 }
