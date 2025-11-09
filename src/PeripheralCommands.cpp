@@ -108,8 +108,8 @@ void CommandParser::handleUART1PWM(const String& cmd, ICommandResponse* response
         duty = dutyStr.toFloat();
     }
 
-    if (peripheralManager.getUART1().setPWMFrequency(freq) &&
-        peripheralManager.getUART1().setPWMDuty(duty)) {
+    // Use atomic setPWMFrequencyAndDuty() to update both parameters with single pulse
+    if (peripheralManager.getUART1().setPWMFrequencyAndDuty(freq, duty)) {
         peripheralManager.getUART1().setPWMEnabled(enablePWM);
 
         // Get actual frequency (may differ from requested due to hardware limitations)
@@ -121,7 +121,7 @@ void CommandParser::handleUART1PWM(const String& cmd, ICommandResponse* response
             float error = abs((int32_t)actualFreq - (int32_t)freq) * 100.0 / freq;
             if (error > 5.0) {
                 response->printf("WARNING: Requested %u Hz, achieved %u Hz (%.1f%% difference)\n", freq, actualFreq, error);
-                response->println("Note: LEDC with 13-bit resolution limits max frequency to ~9.7 kHz");
+                response->println("Note: MCPWM hardware may adjust frequency for optimal resolution");
             }
         }
     } else {
