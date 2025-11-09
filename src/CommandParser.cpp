@@ -798,7 +798,17 @@ void CommandParser::handleSetPWMFreqAndDuty(ICommandResponse* response, uint32_t
     }
 
     // Atomically update both parameters
-    if (uart1.setPWMFrequencyAndDuty(freq, duty)) {
+    Serial.println("═══════════════════════════════════════");
+    Serial.printf("🔵 CommandParser: BEFORE calling setPWMFrequencyAndDuty(%u, %.1f)\n", freq, duty);
+    Serial.flush();
+
+    bool result = uart1.setPWMFrequencyAndDuty(freq, duty);
+
+    Serial.printf("🔵 CommandParser: AFTER setPWMFrequencyAndDuty, result=%d\n", result);
+    Serial.flush();
+    Serial.println("═══════════════════════════════════════");
+
+    if (result) {
         response->printf("✅ PWM 原子性更新: %u Hz, %.1f%%\n", freq, duty);
         response->println("ℹ️ 頻率和占空比已在下一個 PWM 週期同時生效");
 
