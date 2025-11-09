@@ -804,17 +804,35 @@ void CommandParser::handleSetPWMFreqAndDuty(ICommandResponse* response, uint32_t
     // Get current state BEFORE update
     uint32_t old_freq = uart1.getPWMFrequency();
     float old_duty = uart1.getPWMDuty();
-    response->printf("🔵 DEBUG: Before - freq=%u Hz, duty=%.1f%%\n", old_freq, old_duty);
+    uint32_t old_prescaler = uart1.getPWMPrescaler();
+    uint32_t old_period = uart1.getPWMPeriod();
+    response->printf("🔵 BEFORE - freq=%u Hz, duty=%.1f%%, prescaler=%u, period=%u ticks\n",
+                     old_freq, old_duty, old_prescaler, old_period);
 
     // Call the update function
-    response->println("🔵 DEBUG: Calling setPWMFrequencyAndDuty()...");
+    response->println("🔵 Calling setPWMFrequencyAndDuty()...");
     bool result = uart1.setPWMFrequencyAndDuty(freq, duty);
-    response->printf("🔵 DEBUG: Function returned: %s\n", result ? "SUCCESS" : "FAILED");
+    response->printf("🔵 Function returned: %s\n", result ? "SUCCESS" : "FAILED");
 
     // Get state AFTER update
     uint32_t new_freq = uart1.getPWMFrequency();
     float new_duty = uart1.getPWMDuty();
-    response->printf("🔵 DEBUG: After - freq=%u Hz, duty=%.1f%%\n", new_freq, new_duty);
+    uint32_t new_prescaler = uart1.getPWMPrescaler();
+    uint32_t new_period = uart1.getPWMPeriod();
+    response->printf("🔵 AFTER  - freq=%u Hz, duty=%.1f%%, prescaler=%u, period=%u ticks\n",
+                     new_freq, new_duty, new_prescaler, new_period);
+
+    // Analyze what changed
+    if (old_prescaler != new_prescaler) {
+        response->printf("⚠️  PRESCALER CHANGED: %u → %u (calls mcpwm_set_frequency)\n", old_prescaler, new_prescaler);
+    }
+    if (old_period != new_period) {
+        response->printf("⚠️  PERIOD CHANGED: %u → %u (calls mcpwm_set_frequency)\n", old_period, new_period);
+    }
+    if (old_freq == new_freq && old_duty != new_duty && old_prescaler == new_prescaler && old_period == new_period) {
+        response->println("✅ DUTY-ONLY UPDATE (mcpwm_set_duty TEZ-sync, should be glitch-free!)");
+    }
+
     response->println("═══════════════════════════════════════");
 
     if (result) {

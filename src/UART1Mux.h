@@ -212,6 +212,18 @@ public:
     float getPWMDuty() const { return pwmDuty; }
 
     /**
+     * @brief Get current PWM prescaler value
+     * @return Current prescaler value
+     */
+    uint32_t getPWMPrescaler() const { return pwmPrescaler; }
+
+    /**
+     * @brief Get current PWM period value (ticks)
+     * @return Current period value in timer ticks
+     */
+    uint32_t getPWMPeriod() const { return pwmPeriod; }
+
+    /**
      * @brief Enable/disable PWM output (MODE_PWM_RPM only)
      * @param enable true to enable, false to disable
      */
