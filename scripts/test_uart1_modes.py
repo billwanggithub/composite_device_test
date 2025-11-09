@@ -309,7 +309,7 @@ def parse_rpm_from_status(response: str) -> Optional[float]:
         return float(match.group(1))
     return None
 
-def test_hardware_setup() -> None:
+def test_hardware_setup(ser: serial.Serial) -> None:
     """測試 0：驗證硬體連接"""
     print_header("硬體設置驗證")
 
@@ -726,7 +726,7 @@ def main() -> None:
         print_success("序列連接已建立")
 
         # 硬體設置
-        test_hardware_setup()
+        test_hardware_setup(ser)
 
         # 執行測試套件
         test_pwm_rpm_mode(ser)
