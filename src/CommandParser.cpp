@@ -8,6 +8,7 @@
 #include "WiFiManager.h"
 #include "WebServer.h"
 #include "freertos/FreeRTOS.h"
+#include "soc/mcpwm_struct.h"  // For direct MCPWM register access
 #include "freertos/semphr.h"
 #include "freertos/queue.h"
 #include <BLEDevice.h>
@@ -811,8 +812,28 @@ void CommandParser::handleSetPWMFreqAndDuty(ICommandResponse* response, uint32_t
 
     // Call the update function
     response->println("🔵 Calling setPWMFrequencyAndDuty()...");
+
+    // Read MCPWM register BEFORE update
+    uint32_t cfg0_before = MCPWM1.timer[0].timer_cfg0.val;
+    response->printf("🔵 Register BEFORE: cfg0=0x%08X, prescaler=%u, period=%u\n",
+                     cfg0_before, (cfg0_before & 0xFF), ((cfg0_before >> 8) & 0xFFFF));
+
     bool result = uart1.setPWMFrequencyAndDuty(freq, duty);
     response->printf("🔵 Function returned: %s\n", result ? "SUCCESS" : "FAILED");
+
+    // Read MCPWM register AFTER update
+    uint32_t cfg0_after = MCPWM1.timer[0].timer_cfg0.val;
+    response->printf("🔵 Register AFTER:  cfg0=0x%08X, prescaler=%u, period=%u\n",
+                     cfg0_after, (cfg0_after & 0xFF), ((cfg0_after >> 8) & 0xFFFF));
+
+    // Calculate expected frequency
+    uint32_t reg_prescaler = (cfg0_after & 0xFF);
+    uint32_t reg_period = ((cfg0_after >> 8) & 0xFFFF);
+    if (reg_prescaler > 0 && reg_period > 0) {
+        uint32_t calculated_freq = 80000000 / (reg_prescaler * reg_period);
+        response->printf("🔵 Calculated from register: 80MHz / (%u × %u) = %u Hz\n",
+                         reg_prescaler, reg_period, calculated_freq);
+    }
 
     // Get state AFTER update
     uint32_t new_freq = uart1.getPWMFrequency();
