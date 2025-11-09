@@ -773,33 +773,16 @@ void UART1Mux::calculatePWMParameters(uint32_t frequency, uint32_t& prescaler, u
 }
 
 void UART1Mux::updatePWMRegistersDirectly(uint32_t period, float duty) {
-    // HYBRID APPROACH - Direct register for period, API for duty
+    // PURE API APPROACH - Restore PWM output first
     //
-    // After testing, pure register access caused PWM to stop completely.
-    // This hybrid approach balances glitch-free updates with reliability:
-    // - Period: Direct register access (shadow register enabled)
-    // - Duty: ESP-IDF API (proven to work, minimal overhead)
+    // Direct register access to period caused PWM to stop completely.
+    // Reverting to pure API approach to restore functionality.
+    // Will investigate register access issues separately.
 
-    taskENTER_CRITICAL(&mux);
-
-    // Update period register directly (only if it changed)
-    if (period != pwmPeriod) {
-        // Read current CFG0 register value
-        uint32_t cfg0_val = MCPWM1.timer[0].timer_cfg0.val;
-
-        // Clear period bits [23:8] and period_upmethod bit [24]
-        cfg0_val &= 0xFE0000FF;  // Preserve prescaler [7:0] and other bits
-
-        // Set new period [23:8] and enable shadow register mode [24]
-        cfg0_val |= (period << 8) | (1 << 24);
-
-        // Write back to register
-        MCPWM1.timer[0].timer_cfg0.val = cfg0_val;
-    }
-
-    taskEXIT_CRITICAL(&mux);
-
-    // Update duty using ESP-IDF API (outside critical section)
-    // This is safe because mcpwm_set_duty() uses shadow registers internally
+    // Simply update duty using ESP-IDF API
+    // mcpwm_set_duty() should use shadow registers internally (TEZ update)
     mcpwm_set_duty(MCPWM_UNIT_UART1_PWM, MCPWM_TIMER_UART1_PWM, MCPWM_GEN_A, duty);
+
+    // Store the period value for tracking (not used for register update now)
+    pwmPeriod = period;
 }
