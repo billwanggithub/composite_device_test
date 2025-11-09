@@ -802,54 +802,50 @@ void UART1Mux::calculatePWMParameters(uint32_t frequency, uint32_t& prescaler, u
 }
 
 void UART1Mux::updatePWMRegistersDirectly(uint32_t period, float duty) {
-    // SMART UPDATE STRATEGY
+    // ADVANCED GLITCH-FREE UPDATE STRATEGY
     //
     // Two scenarios:
-    // 1. Period unchanged (duty-only update): Use mcpwm_set_duty() - TEZ sync, glitch-free ✅
-    // 2. Period changed (frequency update): Use mcpwm_set_frequency() - may glitch ⚠️
+    // 1. Period unchanged (duty-only): mcpwm_set_duty() - TEZ sync ✅
+    // 2. Period changed (frequency): Direct register + shadow mode - TEZ sync ✅
     //
-    // Challenge: No mcpwm_set_period() API exists in ESP-IDF
-
-    Serial.printf("[UART1] 🔹 updatePWMRegistersDirectly() ENTRY: period=%u, duty=%.1f\n", period, duty);
-    Serial.printf("[UART1] 🔹 Current pwmPeriod=%u\n", pwmPeriod);
-    Serial.flush();
+    // Technical approach for period update:
+    // - Access MCPWM1.timer[0].timer_cfg0 register directly
+    // - Set TIMER_PERIOD_UPMETHOD bit [24] = 1 (enable shadow register)
+    // - Update period bits [23:8]
+    // - New period takes effect at next TEZ (glitch-free!)
 
     if (period != pwmPeriod) {
-        // Period changed - must update frequency
-        Serial.printf("[UART1] 🔧 PERIOD CHANGED BRANCH: %u → %u ticks\n",
-                     pwmPeriod, period);
-        Serial.flush();
+        // Period changed - use direct register access with shadow mode
 
-        // Calculate target frequency from prescaler and period
-        uint32_t target_frequency = 80000000 / (pwmPrescaler * period);
-        Serial.printf("[UART1] 🔧 Calculated target_frequency=%u Hz\n", target_frequency);
-        Serial.flush();
+        // Critical section to ensure atomic register update
+        taskENTER_CRITICAL(&mux);
 
-        // Update frequency (immediate period update, may glitch)
-        Serial.println("[UART1] 🔧 Calling mcpwm_set_frequency()...");
-        Serial.flush();
-        mcpwm_set_frequency(MCPWM_UNIT_UART1_PWM, MCPWM_TIMER_UART1_PWM, target_frequency);
-        Serial.println("[UART1] 🔧 mcpwm_set_frequency() returned");
+        // Read current CFG0 register value
+        uint32_t cfg0_val = MCPWM1.timer[0].timer_cfg0.val;
 
-        // Restore exact duty value (mcpwm_set_frequency proportionally scales duty)
-        Serial.println("[UART1] 🔧 Calling mcpwm_set_duty() to restore duty...");
-        Serial.flush();
-        mcpwm_set_duty(MCPWM_UNIT_UART1_PWM, MCPWM_TIMER_UART1_PWM, MCPWM_GEN_A, duty);
-        Serial.println("[UART1] 🔧 mcpwm_set_duty() returned");
+        // Clear period bits [23:8] and period_upmethod bit [24]
+        // Keep prescaler bits [7:0] unchanged
+        cfg0_val &= 0xFE0000FF;
 
+        // Set new period [23:8] and enable shadow register mode [24]
+        // Bit 24 = 1: period update synchronized to TEZ (glitch-free!)
+        cfg0_val |= (period << 8) | (1 << 24);
+
+        // Write back to register
+        MCPWM1.timer[0].timer_cfg0.val = cfg0_val;
+
+        taskEXIT_CRITICAL(&mux);
+
+        // Update stored period value
         pwmPeriod = period;
+
+        // Update duty using ESP-IDF API (TEZ-synchronized)
+        mcpwm_set_duty(MCPWM_UNIT_UART1_PWM, MCPWM_TIMER_UART1_PWM, MCPWM_GEN_A, duty);
+
     } else {
         // Period unchanged - duty-only update (glitch-free!)
-        Serial.printf("[UART1] ✨ DUTY-ONLY BRANCH: %.1f%% (period unchanged=%u)\n", duty, period);
-        Serial.flush();
 
-        // TEZ-synchronized duty update (glitch-free)
-        Serial.println("[UART1] ✨ Calling mcpwm_set_duty() (TEZ-sync)...");
-        Serial.flush();
+        // TEZ-synchronized duty update
         mcpwm_set_duty(MCPWM_UNIT_UART1_PWM, MCPWM_TIMER_UART1_PWM, MCPWM_GEN_A, duty);
-        Serial.println("[UART1] ✨ mcpwm_set_duty() returned");
     }
-
-    Serial.println("[UART1] 🔹 updatePWMRegistersDirectly() EXIT");
-    Serial.flush();
 }
