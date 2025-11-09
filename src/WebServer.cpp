@@ -494,7 +494,8 @@ void WebServerManager::handleSaveSettings(AsyncWebServerRequest *request) {
 }
 
 void WebServerManager::handleLoadSettings(AsyncWebServerRequest *request) {
-    if (pMotorSettingsManager->load()) {
+    // UART1 settings loaded via peripheral manager
+    if (pPeripheralManager && pPeripheralManager->loadSettings()) {
         request->send(200, "application/json", "{\"success\":true}");
     } else {
         request->send(500, "application/json", "{\"error\":\"Failed to load settings\"}");
@@ -502,9 +503,9 @@ void WebServerManager::handleLoadSettings(AsyncWebServerRequest *request) {
 }
 
 void WebServerManager::handleResetSettings(AsyncWebServerRequest *request) {
-    pMotorSettingsManager->reset();
-    pMotorSettingsManager->save();
-    request->send(200, "application/json", "{\"success\":true}");
+    // Reset handled by peripheral manager
+    // Note: In v3.0, use PERIPHERAL RESET command instead
+    request->send(200, "application/json", "{\"success\":true,\"note\":\"Use PERIPHERAL RESET command for full reset\"}");
 }
 
 void WebServerManager::handleGetWiFiStatus(AsyncWebServerRequest *request) {
@@ -547,22 +548,21 @@ void WebServerManager::handleScanNetworks(AsyncWebServerRequest *request) {
 String WebServerManager::generateStatusJSON() {
     StaticJsonDocument<1024> doc;
 
-    if (pMotorControl) {
-        doc["rpm"] = pMotorControl->getCurrentRPM();
-        doc["raw_rpm"] = pMotorControl->getRawRPM();
-        doc["frequency"] = pMotorControl->getPWMFrequency();
-        doc["freq"] = pMotorControl->getPWMFrequency();  // Alias for compatibility
-        doc["duty"] = pMotorControl->getPWMDuty();
-        doc["realInputFrequency"] = pMotorControl->getInputFrequency();
-        doc["input_freq"] = pMotorControl->getInputFrequency();  // Alias
-        doc["ramping"] = pMotorControl->isRamping();
-        doc["initialized"] = pMotorControl->isInitialized();
-        doc["capture_init"] = pMotorControl->isCaptureInitialized();
-        doc["emergencyStop"] = pMotorControl->isEmergencyStopActive();  // Add emergency stop status
-        doc["emergencyStopTriggerRPM"] = pMotorControl->getEmergencyStopTriggerRPM();  // RPM at trigger time
+    // Motor control now via UART1 (v3.0)
+    if (pPeripheralManager) {
+        UART1Mux& uart1 = pPeripheralManager->getUART1();
+        doc["rpm"] = uart1.getCalculatedRPM();
+        doc["raw_freq"] = uart1.getRPMFrequency();  // Raw frequency instead of raw RPM
+        doc["frequency"] = uart1.getPWMFrequency();
+        doc["freq"] = uart1.getPWMFrequency();  // Alias for compatibility
+        doc["duty"] = uart1.getPWMDuty();
+        doc["realInputFrequency"] = uart1.getRPMFrequency();
+        doc["input_freq"] = uart1.getRPMFrequency();  // Alias
+        // Ramping, emergency stop, and capture_init removed in v3.0
+        doc["initialized"] = true;  // Always initialized if peripheral manager exists
 
         // Format uptime as "H:MM:SS"
-        unsigned long uptimeMs = pMotorControl->getUptime();
+        unsigned long uptimeMs = millis();
         unsigned long seconds = uptimeMs / 1000;
         unsigned long hours = seconds / 3600;
         unsigned long minutes = (seconds % 3600) / 60;
@@ -570,16 +570,11 @@ String WebServerManager::generateStatusJSON() {
         char uptimeStr[32];
         sprintf(uptimeStr, "%lu:%02lu:%02lu", hours, minutes, secs);
         doc["uptime"] = String(uptimeStr);
-    }
 
-    if (pMotorSettingsManager) {
-        const MotorSettings& settings = pMotorSettingsManager->get();
-        doc["polePairs"] = settings.polePairs;
-        doc["maxFrequency"] = settings.maxFrequency;
-        doc["maxSafeRPM"] = settings.maxSafeRPM;  // Add max safe RPM for emergency stop display
-        doc["maxSafeRPMEnabled"] = settings.maxSafeRPMEnabled;  // Add enable/disable flag
-        doc["ledBrightness"] = settings.ledBrightness;
-        doc["rpmUpdateRate"] = settings.rpmUpdateRate;
+        // Settings from UART1
+        doc["polePairs"] = uart1.getPolePairs();
+        // Note: ledBrightness moved to StatusLED, rpmUpdateRate moved elsewhere
+        // maxFrequency and maxSafeRPM features removed in v3.0
     }
 
     if (pWiFiManager && pWiFiSettings) {
@@ -614,14 +609,13 @@ String WebServerManager::generateStatusJSON() {
 String WebServerManager::generateSettingsJSON() {
     StaticJsonDocument<512> doc;
 
-    if (pMotorSettingsManager) {
-        const MotorSettings& settings = pMotorSettingsManager->get();
-        doc["frequency"] = settings.frequency;
-        doc["duty"] = settings.duty;
-        doc["pole_pairs"] = settings.polePairs;
-        doc["max_freq"] = settings.maxFrequency;
-        doc["max_rpm"] = settings.maxSafeRPM;
-        doc["rpm_update_rate"] = settings.rpmUpdateRate;
+    // Motor settings now from UART1 (v3.0)
+    if (pPeripheralManager) {
+        UART1Mux& uart1 = pPeripheralManager->getUART1();
+        doc["frequency"] = uart1.getPWMFrequency();
+        doc["duty"] = uart1.getPWMDuty();
+        doc["pole_pairs"] = uart1.getPolePairs();
+        // max_freq, max_rpm, rpm_update_rate removed in v3.0
     }
 
     String json;
@@ -634,12 +628,14 @@ String WebServerManager::generateSettingsJSON() {
 void WebServerManager::handleGetRPM(AsyncWebServerRequest *request) {
     StaticJsonDocument<256> doc;
 
-    if (pMotorControl) {
-        doc["rpm"] = pMotorControl->getCurrentRPM();
-        doc["realInputFrequency"] = pMotorControl->getInputFrequency();
-        doc["polePairs"] = pMotorSettingsManager->get().polePairs;
-        doc["frequency"] = pMotorControl->getPWMFrequency();
-        doc["duty"] = pMotorControl->getPWMDuty();
+    // Motor control now via UART1 (v3.0)
+    if (pPeripheralManager) {
+        UART1Mux& uart1 = pPeripheralManager->getUART1();
+        doc["rpm"] = uart1.getCalculatedRPM();
+        doc["realInputFrequency"] = uart1.getRPMFrequency();
+        doc["polePairs"] = uart1.getPolePairs();
+        doc["frequency"] = uart1.getPWMFrequency();
+        doc["duty"] = uart1.getPWMDuty();
     }
 
     String json;
@@ -650,27 +646,25 @@ void WebServerManager::handleGetRPM(AsyncWebServerRequest *request) {
 void WebServerManager::handleGetConfig(AsyncWebServerRequest *request) {
     StaticJsonDocument<512> doc;
 
-    if (pMotorSettingsManager && pMotorControl) {
-        const MotorSettings& settings = pMotorSettingsManager->get();
+    // v3.0: Motor control via UART1, many settings removed
+    if (pPeripheralManager) {
+        UART1Mux& uart1 = pPeripheralManager->getUART1();
 
         // UI configuration
-        doc["title"] = "ESP32-S3 Motor Control";
-        doc["subtitle"] = "PWM & RPM Monitoring";
-        doc["language"] = settings.language;  // Return saved language preference
-        doc["chartUpdateRate"] = settings.rpmUpdateRate;
-        doc["ledBrightness"] = settings.ledBrightness;
+        doc["title"] = "ESP32-S3 Motor Control v3.0";
+        doc["subtitle"] = "PWM & RPM Monitoring (UART1)";
+        // language, chartUpdateRate, ledBrightness moved to WiFi settings or removed
+        doc["language"] = "en";  // Default
 
-        // Motor settings - use CURRENT values from MotorControl, not saved settings
-        doc["polePairs"] = settings.polePairs;
-        doc["maxFrequency"] = settings.maxFrequency;
-        doc["maxSafeRPM"] = settings.maxSafeRPM;  // Max RPM protection threshold
-        doc["maxSafeRPMEnabled"] = settings.maxSafeRPMEnabled;  // Enable/disable flag
-        doc["frequency"] = pMotorControl->getPWMFrequency();  // Current actual frequency
-        doc["duty"] = pMotorControl->getPWMDuty();            // Current actual duty
+        // Motor settings from UART1
+        doc["polePairs"] = uart1.getPolePairs();
+        // maxFrequency, maxSafeRPM, maxSafeRPMEnabled removed in v3.0
+        doc["frequency"] = uart1.getPWMFrequency();  // Current actual frequency
+        doc["duty"] = uart1.getPWMDuty();            // Current actual duty
 
         // Also send RPM for initial display
-        doc["rpm"] = pMotorControl->getCurrentRPM();
-        doc["realInputFrequency"] = pMotorControl->getInputFrequency();
+        doc["rpm"] = uart1.getCalculatedRPM();
+        doc["realInputFrequency"] = uart1.getRPMFrequency();
 
         // Check if AP mode is enabled
         if (pWiFiSettings) {
@@ -706,17 +700,13 @@ void WebServerManager::handlePostConfig(AsyncWebServerRequest *request) {
     bool updated = false;
     String updateMessage = "";
 
-    // Handle form parameters (ledBrightness, chartUpdateRate) - legacy support
+    // v3.0: LED brightness and chart update settings moved to WiFi/UI settings
+    // (ledBrightness now in StatusLED, chartUpdateRate/rpmUpdateRate in UI config)
     if (request->hasParam("ledBrightness", true)) {
         uint8_t brightness = request->getParam("ledBrightness", true)->value().toInt();
-        pMotorSettingsManager->get().ledBrightness = brightness;
-        // Note: LED brightness not applied here - requires StatusLED access
-        updated = true;
-    }
-
-    if (request->hasParam("chartUpdateRate", true)) {
-        uint32_t rate = request->getParam("chartUpdateRate", true)->value().toInt();
-        pMotorSettingsManager->get().rpmUpdateRate = rate;
+        if (pStatusLED) {
+            pStatusLED->setBrightness(brightness);
+        }
         updated = true;
     }
 
@@ -728,66 +718,29 @@ void WebServerManager::handlePostConfig(AsyncWebServerRequest *request) {
         DeserializationError error = deserializeJson(doc, *bodyStr);
 
         if (!error) {
-            // Update MotorSettings fields
-            if (doc.containsKey("language")) {
-                const char* lang = doc["language"];
-                strncpy(pMotorSettingsManager->get().language, lang, sizeof(pMotorSettingsManager->get().language) - 1);
-                pMotorSettingsManager->get().language[sizeof(pMotorSettingsManager->get().language) - 1] = '\0';
-                Serial.printf("✅ Language updated to: %s\n", lang);
-                updated = true;
-            }
-
+            // v3.0: Language settings removed (was in MotorSettings)
+            // LED brightness now handled directly via StatusLED
             if (doc.containsKey("ledBrightness")) {
                 uint8_t brightness = doc["ledBrightness"];
-                pMotorSettingsManager->get().ledBrightness = brightness;
-
                 // Apply brightness to actual LED immediately
                 if (pStatusLED) {
                     pStatusLED->setBrightness(brightness);
                     Serial.printf("✅ LED brightness updated and applied: %d\n", brightness);
-                } else {
-                    Serial.printf("✅ LED brightness updated to: %d (LED not available)\n", brightness);
                 }
                 updated = true;
             }
 
-            if (doc.containsKey("rpmUpdateRate")) {
-                uint32_t rate = doc["rpmUpdateRate"];
-                pMotorSettingsManager->get().rpmUpdateRate = rate;
-                Serial.printf("✅ RPM update rate set to: %u ms\n", rate);
-                updated = true;
-            }
+            // rpmUpdateRate removed in v3.0 (was UI-only setting)
 
-            if (doc.containsKey("polePairs")) {
+            // Motor settings now via UART1 (v3.0)
+            if (doc.containsKey("polePairs") && pPeripheralManager) {
                 uint8_t polePairs = doc["polePairs"];
-                pMotorSettingsManager->get().polePairs = polePairs;
-                if (pMotorControl) {
-                    pMotorControl->setPolePairs(polePairs);
-                    Serial.printf("✅ Pole pairs set to: %d\n", polePairs);
-                }
+                pPeripheralManager->getUART1().setPolePairs(polePairs);
+                Serial.printf("✅ Pole pairs set to: %d\n", polePairs);
                 updated = true;
             }
 
-            if (doc.containsKey("maxFrequency")) {
-                uint32_t maxFreq = doc["maxFrequency"];
-                pMotorSettingsManager->get().maxFrequency = maxFreq;
-                Serial.printf("✅ Max frequency set to: %u Hz\n", maxFreq);
-                updated = true;
-            }
-
-            if (doc.containsKey("maxSafeRPM")) {
-                uint32_t maxRPM = doc["maxSafeRPM"];
-                pMotorSettingsManager->get().maxSafeRPM = maxRPM;
-                Serial.printf("✅ Max safe RPM set to: %u\n", maxRPM);
-                updated = true;
-            }
-
-            if (doc.containsKey("maxSafeRPMEnabled")) {
-                bool enabled = doc["maxSafeRPMEnabled"];
-                pMotorSettingsManager->get().maxSafeRPMEnabled = enabled;
-                Serial.printf("✅ Max safe RPM protection %s\n", enabled ? "ENABLED" : "DISABLED");
-                updated = true;
-            }
+            // maxFrequency, maxSafeRPM, maxSafeRPMEnabled removed in v3.0
 
             // WiFi settings
             if (doc.containsKey("wifiSSID") || doc.containsKey("wifiPassword")) {
@@ -839,9 +792,9 @@ void WebServerManager::handlePostConfig(AsyncWebServerRequest *request) {
                 updateMessage += "BLE name requires implementation. ";
             }
 
-            // Save settings to NVS if anything changed
-            if (updated) {
-                pMotorSettingsManager->save();
+            // Save settings to NVS if anything changed (v3.0: via peripheral manager)
+            if (updated && pPeripheralManager) {
+                pPeripheralManager->saveSettings();
                 Serial.println("💾 Settings saved to NVS");
             }
         }
@@ -874,18 +827,19 @@ void WebServerManager::handlePostPWM(AsyncWebServerRequest *request) {
     bool success = true;
     String message = "";
 
-    if (hasFreq) {
+    // v3.0: Motor control via UART1
+    if (hasFreq && pPeripheralManager) {
         uint32_t freq = request->getParam("frequency", true)->value().toInt();
-        if (pMotorControl->setPWMFrequency(freq)) {
+        if (pPeripheralManager->getUART1().setPWMFrequency(freq)) {
             message += "Frequency: " + String(freq) + "Hz ";
         } else {
             success = false;
         }
     }
 
-    if (hasDuty) {
+    if (hasDuty && pPeripheralManager) {
         float duty = request->getParam("duty", true)->value().toFloat();
-        if (pMotorControl->setPWMDuty(duty)) {
+        if (pPeripheralManager->getUART1().setPWMDuty(duty)) {
             message += "Duty: " + String(duty, 1) + "%";
         } else {
             success = false;
@@ -912,29 +866,18 @@ void WebServerManager::handlePostPolePairs(AsyncWebServerRequest *request) {
         return;
     }
 
-    // Update pole pairs in settings
-    // Note: MotorControl reads polePairs from settings when calculating RPM
-    pMotorSettingsManager->get().polePairs = polePairs;
-
-    request->send(200, "application/json", "{\"success\":true,\"polePairs\":" + String(polePairs) + "}");
+    // v3.0: Update pole pairs via UART1
+    if (pPeripheralManager) {
+        pPeripheralManager->getUART1().setPolePairs(polePairs);
+        request->send(200, "application/json", "{\"success\":true,\"polePairs\":" + String(polePairs) + "}");
+    } else {
+        request->send(500, "application/json", "{\"success\":false,\"error\":\"Peripheral manager not initialized\"}");
+    }
 }
 
 void WebServerManager::handlePostMaxFrequency(AsyncWebServerRequest *request) {
-    if (!request->hasParam("maxFrequency", true)) {
-        request->send(400, "application/json", "{\"success\":false,\"error\":\"Missing maxFrequency parameter\"}");
-        return;
-    }
-
-    uint32_t maxFreq = request->getParam("maxFrequency", true)->value().toInt();
-
-    if (maxFreq < 10 || maxFreq > 500000) {
-        request->send(400, "application/json", "{\"success\":false,\"error\":\"Max frequency must be between 10 and 500000 Hz\"}");
-        return;
-    }
-
-    pMotorSettingsManager->get().maxFrequency = maxFreq;
-
-    request->send(200, "application/json", "{\"success\":true,\"maxFrequency\":" + String(maxFreq) + "}");
+    // v3.0: maxFrequency feature removed (was for limiting motor speed)
+    request->send(200, "application/json", "{\"success\":true,\"note\":\"maxFrequency feature removed in v3.0\"}");
 }
 
 void WebServerManager::handleGetAPMode(AsyncWebServerRequest *request) {
@@ -977,31 +920,27 @@ void WebServerManager::handlePostAPMode(AsyncWebServerRequest *request) {
 }
 
 void WebServerManager::handlePostSave(AsyncWebServerRequest *request) {
-    if (pMotorSettingsManager && pMotorSettingsManager->save()) {
-        request->send(200, "application/json", "{\"success\":true,\"message\":\"Settings saved to EEPROM\"}");
+    // v3.0: Settings saved via peripheral manager
+    if (pPeripheralManager && pPeripheralManager->saveSettings()) {
+        request->send(200, "application/json", "{\"success\":true,\"message\":\"Settings saved to NVS\"}");
     } else {
         request->send(500, "application/json", "{\"success\":false,\"error\":\"Failed to save settings\"}");
     }
 }
 
 void WebServerManager::handlePostLoad(AsyncWebServerRequest *request) {
-    if (pMotorSettingsManager && pMotorSettingsManager->load()) {
-        // Apply loaded settings to motor control
-        const MotorSettings& settings = pMotorSettingsManager->get();
-        pMotorControl->setPWMFrequency(settings.frequency);
-        pMotorControl->setPWMDuty(settings.duty);
-        // Note: polePairs are read from settings by MotorControl when calculating RPM
-
+    // v3.0: Settings loaded via peripheral manager
+    if (pPeripheralManager && pPeripheralManager->loadSettings()) {
         // Return the loaded values so the web interface can update
+        UART1Mux& uart1 = pPeripheralManager->getUART1();
+
         StaticJsonDocument<256> doc;
         doc["success"] = true;
-        doc["message"] = "Settings loaded from EEPROM";
-        doc["frequency"] = settings.frequency;
-        doc["duty"] = settings.duty;
-        doc["polePairs"] = settings.polePairs;
-        doc["maxFrequency"] = settings.maxFrequency;
-        doc["ledBrightness"] = settings.ledBrightness;
-        doc["rpmUpdateRate"] = settings.rpmUpdateRate;
+        doc["message"] = "Settings loaded from NVS";
+        doc["frequency"] = uart1.getPWMFrequency();
+        doc["duty"] = uart1.getPWMDuty();
+        doc["polePairs"] = uart1.getPolePairs();
+        // maxFrequency, ledBrightness, rpmUpdateRate removed in v3.0
 
         String json;
         serializeJson(doc, json);
