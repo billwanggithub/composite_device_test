@@ -338,27 +338,18 @@ async def find_ble_device_async(name: str = BLE_DEVICE_NAME, timeout: float = DE
     try:
         from bleak.exc import BleakError
         
-        # 設置更長的掃描超時
-        devices = await BleakScanner.discover(timeout=timeout, return_adv=True)
+        # 設置更長的掃描超時（bleak 1.1.1 不支持 return_adv=True）
+        devices = await BleakScanner.discover(timeout=timeout)
         
         if not devices:
             print("❌ 未找到任何設備")
             return None
 
-        # 尋找匹配的設備 - 處理不同的返回格式
+        # 尋找匹配的設備
         found_device = None
         device_list = []
         
-        for item in devices:
-            # 處理不同的返回格式
-            if isinstance(item, tuple):
-                # 格式 1: (device, adv_data)
-                d, adv_data = item
-                device_obj = d
-            else:
-                # 格式 2: BleakDevice 物件
-                device_obj = item
-            
+        for device_obj in devices:
             # 提取設備信息
             try:
                 device_name = device_obj.name if hasattr(device_obj, 'name') else None
