@@ -2,6 +2,29 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Quick Start for Development
+
+**Build and Test:**
+```bash
+pio run                          # Build firmware
+pio run -t clean && pio run      # Clean rebuild (after platformio.ini changes)
+pio run -t upload                # Upload (requires bootloader mode first)
+pio device monitor               # View CDC serial output (enable DTR in terminal)
+```
+
+**Test Interfaces:**
+```bash
+python scripts/test_hid.py interactive      # Test HID via USB
+python scripts/test_cdc.py                  # Test CDC via serial
+python scripts/ble_client.py --name BillCat_Fan_Control  # Test BLE
+```
+
+**Verify Device:**
+- Open CDC serial monitor after upload
+- Send: `INFO` - Check flash/PSRAM sizes
+- Send: `HELP` - Verify command parser works
+- Send: `UART1 STATUS` - Check UART1 mode (defaults to PWM)
+
 ## Project Overview
 
 This is an ESP32-S3 multi-interface motor control system with comprehensive communication interfaces. The device provides unified control accessible through USB, BLE, and WiFi protocols.
@@ -42,11 +65,102 @@ This is an ESP32-S3 multi-interface motor control system with comprehensive comm
 - Bluetooth: BLE only (Classic Bluetooth not supported on ESP32-S3)
 - WiFi: 802.11 b/g/n (2.4 GHz)
 
+## Development Workflow
+
+### Common Development Commands
+
+**Quick Build and Test Cycle:**
+```bash
+# Build firmware (default N16R8 variant)
+pio run
+
+# Clean rebuild (do this after changing platformio.ini or major code changes)
+pio run -t clean && pio run
+
+# Upload to device (requires bootloader mode: Hold BOOT, press RESET, release BOOT)
+pio run -t upload
+
+# Monitor serial output (CDC console - verify DTR is enabled in your terminal)
+pio device monitor
+
+# Complete rebuild and upload cycle
+pio run -t clean && pio run && pio run -t upload
+```
+
+**Testing After Upload:**
+```bash
+# Physical disconnect/reconnect USB to ensure proper enumeration
+# Then open CDC serial monitor and test:
+INFO              # Verify device booted and shows correct flash/PSRAM sizes
+HELP              # Show all available commands
+UART1 STATUS      # Check UART1 mode (should default to PWM)
+```
+
+**Testing Different Interfaces:**
+```bash
+# CDC (USB Serial) - use serial monitor
+python scripts/test_cdc.py
+
+# HID (USB Human Interface Device) - requires pywinusb
+python scripts/test_hid.py test
+python scripts/test_hid.py interactive
+
+# BLE (Bluetooth Low Energy) - requires bleak library
+python scripts/ble_client.py --name BillCat_Fan_Control
+```
+
+### Code Organization for Development
+
+**File Organization by Concern:**
+
+| File/Directory | Purpose | Key Classes/Functions |
+|---|---|---|
+| `src/main.cpp` | System initialization, USB/BLE setup, task creation | `setup()`, `loop()`, FreeRTOS task creation |
+| `src/CommandParser.*` | Unified command routing and execution | `CommandParser`, `processCommand()` |
+| `src/CustomHID.*` | 64-byte HID descriptor and protocol | `CustomHID64` class |
+| `src/HIDProtocol.*` | HID packet parsing (0xA1 vs plain text) | `HIDProtocol::parseCommand()` |
+| `src/UART1Mux.*` | Motor control via UART1, PWM/RPM, MCPWM | `UART1Mux`, glitch-free PWM updates |
+| `src/UART2Manager.*` | Standard UART2 serial communication | `UART2Manager` class |
+| `src/PeripheralManager.*` | Centralized peripheral control | `PeripheralManager`, all peripheral init |
+| `src/StatusLED.*` | WS2812 RGB LED control | `StatusLED`, color/blink patterns |
+| `src/WebServer.*` | HTTP server, REST API, web dashboard | `setupWebServer()`, API handlers |
+| `src/WiFiManager.*` | WiFi AP/Station mode, connection | `connectToWiFi()`, event handlers |
+| `src/PeripheralSettings.*` | NVS storage/loading for all settings | `saveSettings()`, `loadSettings()` |
+
+**Adding a New Command:**
+1. **Add handler in CommandParser.cpp** - Add case in `processCommand()` to detect command string
+2. **Implement logic** - Call appropriate peripheral manager or control class
+3. **Use response->print()** - Output via `CDCResponse`, `HIDResponse`, or `BLEResponse` as needed
+4. **Example:** See `handleUART1Commands()` for multi-word command parsing pattern
+
+### Debugging Tips
+
+**Enable Debug Output:**
+- Most modules have debug `printf()` calls that compile to CDC serial output
+- View via `pio device monitor` (remember to enable DTR)
+- Search for `[UART1]`, `[HID]`, `[BLE]` prefixes to identify data source
+
+**Common Issues and Quick Fixes:**
+
+| Symptom | Likely Cause | Quick Fix |
+|---------|-------------|----------|
+| Device not enumerating | Stale USB cache | `pio run -t erase` then upload |
+| Only CDC works, HID broken | USB descriptor mismatch | Clean build: `pio run -t clean && pio run` |
+| Commands seem to hang | DTR not enabled in serial monitor | Enable DTR, or press RESET after opening monitor |
+| UART1 PWM has glitches | Prescaler changed (expected) | See next PWM update uses shadow register mode |
+| Memory allocation fails | PSRAM not detected | Verify `-DBOARD_HAS_PSRAM` in build flags |
+
+### When to Use Which Build Approach
+
+**Use `pio run`:** Daily development, small code changes
+**Use `pio run -t clean && pio run`:** After changing `platformio.ini`, peripheral logic, or core USB code
+**Use `pio run -t erase && pio run -t upload`:** USB enumeration issues or after major hardware changes
+
 ## Changing Board Variants
 
 This project supports all ESP32-S3-DevKitC-1 variants. Default: **N16R8** (16MB Flash, 8MB PSRAM).
 
-### Quick Change Process
+### Quick Change Process (Keep this section as-is)
 
 **1. Identify Your Board**
 
