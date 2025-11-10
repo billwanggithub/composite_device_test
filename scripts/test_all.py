@@ -28,6 +28,10 @@ import threading
 import asyncio
 from typing import List, Optional, Tuple
 
+# 設置 Windows 控制台編碼為 UTF-8
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8')
+
 # ==================== 配置常數 ====================
 # 序列埠參數
 DEFAULT_BAUDRATE = 115200
@@ -329,30 +333,80 @@ async def find_ble_device_async(name: str = BLE_DEVICE_NAME, timeout: float = DE
     print("掃描 BLE 介面")
     print("=" * 60)
 
-    print(f"掃描 BLE 裝置 '{name}'...", end=" ")
-    devices = await BleakScanner.discover(timeout=timeout)
+    print(f"掃描 BLE 裝置 '{name}'...", end=" ", flush=True)
+    
+    try:
+        from bleak.exc import BleakError
+        
+        # 設置更長的掃描超時
+        devices = await BleakScanner.discover(timeout=timeout, return_adv=True)
+        
+        if not devices:
+            print("❌ 未找到任何設備")
+            return None
 
-    for d in devices:
-        if d.name and name in d.name:
-            print(f"✅ 找到！({d.address})")
+        # 尋找匹配的設備 - 處理不同的返回格式
+        found_device = None
+        device_list = []
+        
+        for item in devices:
+            # 處理不同的返回格式
+            if isinstance(item, tuple):
+                # 格式 1: (device, adv_data)
+                d, adv_data = item
+                device_obj = d
+            else:
+                # 格式 2: BleakDevice 物件
+                device_obj = item
+            
+            # 提取設備信息
             try:
-                from bleak.exc import BleakError
-                client = BleakClient(d.address)
-                await client.connect()
-                if client.is_connected:
-                    return client
-                else:
-                    print("❌ 無法連接")
-                    return None
-            except BleakError as e:
-                print(f"❌ BLE 連接失敗: {e}")
-                return None
-            except OSError as e:
-                print(f"❌ 系統錯誤: {e}")
-                return None
+                device_name = device_obj.name if hasattr(device_obj, 'name') else None
+                device_addr = device_obj.address if hasattr(device_obj, 'address') else str(device_obj)
+                
+                if device_name:
+                    device_list.append(device_name)
+                    if name in device_name:
+                        found_device = device_obj
+                        break
+            except:
+                pass
+        
+        if not found_device:
+            print(f"❌ 未找到設備 '{name}'")
+            if device_list:
+                print(f"   掃描到的設備: {device_list[:5]}...")
+            return None
 
-    print("❌ 未找到")
-    return None
+        print(f"✅ 找到！({device_obj.address})")
+        
+        try:
+            client = BleakClient(device_obj.address)
+            print(f"正在連接 {device_obj.address}...", end=" ", flush=True)
+            await client.connect(timeout=10.0)
+            
+            if client.is_connected:
+                print("✅ 已連接")
+                return client
+            else:
+                print("❌ 無法連接")
+                return None
+                
+        except BleakError as e:
+            print(f"❌ BLE 連接失敗: {e}")
+            return None
+        except asyncio.TimeoutError as e:
+            print(f"❌ 連接超時: {e}")
+            return None
+        except OSError as e:
+            print(f"❌ 系統錯誤: {e}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ BLE 掃描失敗: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 def find_ble_device(name: str = BLE_DEVICE_NAME, timeout: float = DEFAULT_BLE_SCAN_TIMEOUT) -> Optional['BleakClient']:
     """掃描並連接 BLE 裝置（同步包裝）"""
@@ -360,16 +414,18 @@ def find_ble_device(name: str = BLE_DEVICE_NAME, timeout: float = DEFAULT_BLE_SC
         return None
 
     try:
-        # 在新的 event loop 中執行
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        client = loop.run_until_complete(find_ble_device_async(name, timeout))
+        # 使用 asyncio.run() - Windows 友善的方式
+        client = asyncio.run(find_ble_device_async(name, timeout))
         return client
     except RuntimeError as e:
         print(f"❌ BLE event loop 錯誤: {e}")
+        import traceback
+        traceback.print_exc()
         return None
     except Exception as e:
         print(f"❌ BLE 掃描失敗: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 # BLE 通知處理器（全域，只設置一次）
@@ -466,12 +522,23 @@ def test_ble_command(client: Optional['BleakClient'], cmd: str, timeout_sec: flo
         return None
 
     try:
-        # 使用已存在的 event loop（在 find_ble_device 時設定的）
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(test_ble_command_async(client, cmd, timeout_sec))
-    except RuntimeError as e:
-        print(f"❌ BLE event loop 錯誤: {e}")
-        return None
+        # 嘗試取得已存在的 event loop
+        try:
+            loop = asyncio.get_running_loop()
+            # 如果在 async 上下文中，直接執行（但這不應該發生）
+            return asyncio.run(test_ble_command_async(client, cmd, timeout_sec))
+        except RuntimeError:
+            # 沒有正在執行的 loop，嘗試取得或建立新的
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_closed():
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            return loop.run_until_complete(test_ble_command_async(client, cmd, timeout_sec))
     except Exception as e:
         print(f"❌ BLE 命令失敗: {e}")
         import traceback
@@ -618,7 +685,15 @@ def test_ble_only(ble_client: Optional['BleakClient']) -> None:
     print("=" * 60)
 
     # 設置 BLE 通知（只訂閱一次）
-    loop = asyncio.get_event_loop()
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
     if not loop.run_until_complete(setup_ble_notifications_async(ble_client)):
         print("❌ 無法設置 BLE 通知")
         return
@@ -668,8 +743,17 @@ def test_all_interfaces(ser: Optional[serial.Serial] = None, hid_device: Optiona
 
     # 如果有 BLE 客戶端，設置通知（只訂閱一次）
     ble_notifications_setup = False
+    loop = None
     if ble_client:
-        loop = asyncio.get_event_loop()
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
         ble_notifications_setup = loop.run_until_complete(setup_ble_notifications_async(ble_client))
         if not ble_notifications_setup:
             print("⚠️  無法設置 BLE 通知，BLE 測試將被跳過")
@@ -702,8 +786,7 @@ def test_all_interfaces(ser: Optional[serial.Serial] = None, hid_device: Optiona
 
     finally:
         # 如果設置了 BLE 通知，清理它（只取消一次）
-        if ble_client and ble_notifications_setup:
-            loop = asyncio.get_event_loop()
+        if ble_client and ble_notifications_setup and loop:
             loop.run_until_complete(cleanup_ble_notifications_async(ble_client))
 
 def main() -> None:
@@ -816,7 +899,17 @@ def main() -> None:
             # 需要異步關閉
             try:
                 from bleak.exc import BleakError
-                loop = asyncio.get_event_loop()
+                
+                # 獲取或建立 event loop
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_closed():
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                
                 loop.run_until_complete(ble_client.disconnect())
                 print("BLE 介面已關閉")
             except BleakError:

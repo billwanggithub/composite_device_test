@@ -677,11 +677,17 @@ void setup() {
     pService->start();
     statusLED.update();  // Update LED after service start
 
-    // 開始廣播
+    // 開始廣播 - 增強設置以確保被掃描到
     BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(SERVICE_UUID);
-    pAdvertising->setScanResponse(false);
-    pAdvertising->setMinPreferred(0x0);
+    pAdvertising->setScanResponse(true);  // 啟用掃描回應（增加可發現性）
+    pAdvertising->setMinPreferred(0x06);  // 設置最小廣播間隔
+    pAdvertising->setMaxPreferred(0x12);  // 設置最大廣播間隔
+    pAdvertising->setAdvertisementType(ADV_TYPE_IND);  // 可連接和可掃描廣播
+    
+    // 設置廣播功率（增強信號）
+    BLEDevice::setPower(ESP_PWR_LVL_P9);  // 最大功率 (+9 dBm)
+    
     BLEDevice::startAdvertising();
     statusLED.update();  // Update LED after advertising start
 

@@ -53,7 +53,12 @@ async def scan_devices(timeout: float = DEFAULT_SCAN_TIMEOUT) -> None:
     """Scan for all BLE devices and display them"""
     print(f"Scanning for BLE devices (timeout: {timeout}s)...")
     print("=" * 60)
-    devices = await BleakScanner.discover(timeout=timeout)
+    
+    try:
+        devices = await BleakScanner.discover(timeout=timeout, return_adv=True)
+    except TypeError:
+        # 舊版本的 bleak 不支持 return_adv 參數
+        devices = await BleakScanner.discover(timeout=timeout)
 
     if not devices:
         print("No BLE devices found.")
@@ -61,20 +66,73 @@ async def scan_devices(timeout: float = DEFAULT_SCAN_TIMEOUT) -> None:
 
     print(f"Found {len(devices)} device(s):")
     print("-" * 60)
-    for i, d in enumerate(devices, 1):
-        name = d.name if d.name else "<Unknown>"
+    
+    for i, device in enumerate(devices, 1):
+        name = None
+        address = None
+        rssi = None
+        
+        # 處理不同的 bleak 版本返回格式
+        if isinstance(device, tuple) and len(device) == 2:
+            # Bleak 0.20+ 格式: (BLEDevice, AdvertisementData)
+            device_obj, adv_data = device
+            name = device_obj.name
+            address = device_obj.address
+            rssi = device_obj.rssi if hasattr(device_obj, 'rssi') else None
+            
+            # 如果 name 為空，嘗試從廣告數據中提取
+            if not name and hasattr(adv_data, 'local_name'):
+                name = adv_data.local_name
+        else:
+            # Bleak < 0.20 格式: BLEDevice 對象
+            if hasattr(device, 'name'):
+                name = device.name
+            if hasattr(device, 'address'):
+                address = device.address
+            if hasattr(device, 'rssi'):
+                rssi = device.rssi
+        
+        name = name if name else "<Unknown>"
+        rssi_str = f", RSSI: {rssi} dBm" if rssi is not None else ""
+        
         print(f"{i}. Name: {name}")
-        print(f"   Address: {d.address}")
-        print(f"   RSSI: {d.rssi} dBm")
+        if address:
+            print(f"   Address: {address}{rssi_str}")
         print()
     print("=" * 60)
 
 async def scan_for_name(name: str, timeout: float = DEFAULT_SCAN_TIMEOUT) -> Optional[str]:
     """Scan for BLE device by name substring match"""
-    devices = await BleakScanner.discover(timeout=timeout)
-    for d in devices:
-        if d.name and name in d.name:
-            return d.address
+    try:
+        devices = await BleakScanner.discover(timeout=timeout, return_adv=True)
+    except TypeError:
+        # 舊版本的 bleak 不支持 return_adv 參數
+        devices = await BleakScanner.discover(timeout=timeout)
+    
+    for device in devices:
+        device_name = None
+        device_addr = None
+        
+        # 處理不同的 bleak 版本返回格式
+        if isinstance(device, tuple) and len(device) == 2:
+            # Bleak 0.20+ 格式: (BLEDevice, AdvertisementData)
+            device_obj, adv_data = device
+            device_name = device_obj.name
+            device_addr = device_obj.address
+            
+            # 如果 name 為空，嘗試從廣告數據中提取
+            if not device_name and hasattr(adv_data, 'local_name'):
+                device_name = adv_data.local_name
+        else:
+            # Bleak < 0.20 格式
+            if hasattr(device, 'name'):
+                device_name = device.name
+            if hasattr(device, 'address'):
+                device_addr = device.address
+        
+        if device_name and name in device_name:
+            return device_addr
+    
     return None
 
 async def run(address: Optional[str] = None, name: Optional[str] = None) -> None:
