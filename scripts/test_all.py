@@ -372,6 +372,9 @@ async def find_ble_device_async(name: str = BLE_DEVICE_NAME, timeout: float = DE
         print(f"✅ 找到！({device_obj.address})")
         
         try:
+            # 短暫延遲以確保設備在掃描後準備就緒
+            await asyncio.sleep(0.5)
+            
             client = BleakClient(device_obj.address)
             print(f"正在連接 {device_obj.address}...", end=" ", flush=True)
             await client.connect(timeout=10.0)
