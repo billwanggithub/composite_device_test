@@ -41,16 +41,28 @@ bool WebServerManager::start() {
         return false;
     }
 
+    USBSerial.printf("[WS] start() 方法已調用\n");
+    USBSerial.printf("[WS] server=%p, ws=%p\n", server, ws);
+
     // Setup WebSocket
+    USBSerial.printf("[WS] 正在調用 setupWebSocket()...\n");
+    USBSerial.flush();
     setupWebSocket();
+    USBSerial.printf("[WS] setupWebSocket() 已返回\n");
+    USBSerial.flush();
+
+    USBSerial.printf("[WS] 正在添加 WebSocket 處理器到伺服器...\n");
     server->addHandler(ws);
+    USBSerial.printf("[WS] WebSocket 處理器已添加\n");
 
     // Setup HTTP routes
     setupRoutes();
 
     // Start server
+    USBSerial.printf("[WS] 正在啟動伺服器...\n");
     server->begin();
     running = true;
+    USBSerial.printf("[WS] 伺服器已啟動\n");
 
     Serial.println("✅ Web Server started");
     Serial.printf("  Access at: http://%s/\n", pWiFiManager->getIPAddress().c_str());
@@ -128,10 +140,14 @@ void WebServerManager::broadcastStatus() {
 }
 
 void WebServerManager::setupWebSocket() {
+    USBSerial.printf("[WS] setupWebSocket: 正在設置 WebSocket 事件處理器...\n");
+
     ws->onEvent([this](AsyncWebSocket *server, AsyncWebSocketClient *client,
                        AwsEventType type, void *arg, uint8_t *data, size_t len) {
         this->handleWebSocketEvent(server, client, type, arg, data, len);
     });
+
+    USBSerial.printf("[WS] ✅ WebSocket 事件處理器已設置\n");
 }
 
 void WebServerManager::handleWebSocketEvent(AsyncWebSocket *server,
@@ -140,19 +156,23 @@ void WebServerManager::handleWebSocketEvent(AsyncWebSocket *server,
                                             void *arg,
                                             uint8_t *data,
                                             size_t len) {
+    USBSerial.printf("[WS] handleWebSocketEvent: type=%d, client=%u\n", type, client ? client->id() : 0);
+
     switch (type) {
         case WS_EVT_CONNECT:
-            Serial.printf("[WS] Client #%u connected from %s\n",
+            USBSerial.printf("[WS] ✅ Client #%u connected from %s\n",
                          client->id(), client->remoteIP().toString().c_str());
+            USBSerial.printf("[WS] 當前客戶端數: %d\n", server->count());
             // Send initial status
             broadcastStatus();
             break;
 
         case WS_EVT_DISCONNECT:
-            Serial.printf("[WS] Client #%u disconnected\n", client->id());
+            USBSerial.printf("[WS] ❌ Client #%u disconnected\n", client->id());
             break;
 
         case WS_EVT_DATA:
+            USBSerial.printf("[WS] 📨 WS_EVT_DATA 事件已觸發, 長度=%d, arg=%p\n", len, arg);
             handleWebSocketMessage(arg, data, len);
             break;
 
@@ -165,11 +185,16 @@ void WebServerManager::handleWebSocketEvent(AsyncWebSocket *server,
 void WebServerManager::handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
     AwsFrameInfo *info = (AwsFrameInfo*)arg;
 
+    USBSerial.printf("[WS] handleWebSocketMessage 已調用: final=%d, index=%d, len=%d, opcode=%d\n",
+                 info->final, info->index, info->len, info->opcode);
+    USBSerial.flush();
+
     if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
         data[len] = 0;  // Null terminate
         String message = (char*)data;
 
-        Serial.printf("[WS] Received: %s\n", message.c_str());
+        USBSerial.printf("[WS] Received: %s\n", message.c_str());
+        USBSerial.flush();
 
         // 首先嘗試作為 JSON 命令解析
         StaticJsonDocument<256> doc;
@@ -219,24 +244,36 @@ void WebServerManager::handleWebSocketMessage(void *arg, uint8_t *data, size_t l
 
             // 跳過空命令
             if (trimmed.length() == 0) {
+                USBSerial.printf("[WS] 空命令已忽略\n");
                 return;
             }
 
-            Serial.printf("[WS] 文本命令: %s\n", trimmed.c_str());
+            USBSerial.printf("[WS] ===== 文本命令開始 =====\n");
+            USBSerial.printf("[WS] 原始消息: %s\n", message.c_str());
+            USBSerial.printf("[WS] 修剪後: %s\n", trimmed.c_str());
+            USBSerial.printf("[WS] 消息長度: %d\n", trimmed.length());
 
             // 取得客戶端 ID
             uint32_t client_id = info->num;
+            USBSerial.printf("[WS] 客戶端 ID: %d\n", client_id);
 
             // 創建 WebSocket 響應對象
             WebSocketResponse wsResponse((void*)ws, client_id);
+            USBSerial.printf("[WS] WebSocketResponse 已建立\n");
 
             // 使用命令解析器處理命令
+            USBSerial.printf("[WS] 調用 parser.processCommand()...\n");
             bool commandProcessed = parser.processCommand(trimmed, &wsResponse, CMD_SOURCE_WEBSOCKET);
+            USBSerial.printf("[WS] parser.processCommand() 返回: %s\n", commandProcessed ? "true" : "false");
 
             // 取得響應文本
             String response = wsResponse.getResponse();
+            USBSerial.printf("[WS] 響應長度: %d\n", response.length());
+            if (response.length() > 0) {
+                USBSerial.printf("[WS] 響應內容 (前 100 字): %s\n", response.substring(0, 100).c_str());
+            }
 
-            Serial.printf("[WS] 命令已處理: %s, 響應長度: %d\n",
+            USBSerial.printf("[WS] 命令已處理: %s, 響應長度: %d\n",
                          commandProcessed ? "是" : "否", response.length());
 
             // 如果沒有響應，檢查是否是未知命令
@@ -244,21 +281,23 @@ void WebServerManager::handleWebSocketMessage(void *arg, uint8_t *data, size_t l
                 if (!commandProcessed) {
                     // 命令未識別
                     response = "❌ 未知命令: " + trimmed;
-                    Serial.printf("[WS] 未知命令，發送錯誤消息\n");
+                    USBSerial.printf("[WS] 未知命令，發送錯誤消息\n");
                 } else {
                     // 命令被處理但沒有響應（不應該發生）
                     response = "✓ 命令已執行\n";
-                    Serial.printf("[WS] 命令被處理但沒有響應\n");
+                    USBSerial.printf("[WS] 命令被處理但沒有響應\n");
                 }
             }
 
             // 發送響應給客戶端
+            USBSerial.printf("[WS] 查找客戶端 %d...\n", client_id);
             AsyncWebSocketClient* client = ws->client(client_id);
             if (client) {
-                Serial.printf("[WS] 發送響應到客戶端 %d: %d 字節\n", client_id, response.length());
+                USBSerial.printf("[WS] 客戶端已找到，發送 %d 字節的響應\n", response.length());
                 client->text(response);
+                USBSerial.printf("[WS] 響應已發送\n");
             } else {
-                Serial.printf("[WS] ❌ 找不到客戶端 %d\n", client_id);
+                USBSerial.printf("[WS] ❌ 找不到客戶端 %d\n", client_id);
             }
 
             // 廣播狀態更新
@@ -266,6 +305,9 @@ void WebServerManager::handleWebSocketMessage(void *arg, uint8_t *data, size_t l
                 broadcastStatus();
             }
         }
+    } else {
+        USBSerial.printf("[WS] ❌ 消息不符合條件: final=%d, index=%d, len=%d, info->len=%d, opcode=%d\n",
+                     info->final, info->index, len, info->len, info->opcode);
     }
 }
 

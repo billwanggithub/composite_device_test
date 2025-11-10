@@ -23,8 +23,6 @@ function Run-Check($command) {
     }
 }
 
-Run-Check "pio run -t clean"
-Run-Check "pio run"
 Run-Check "pio run --target upload"
 Run-Check "pio run --target uploadfs"
 

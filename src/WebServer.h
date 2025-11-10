@@ -5,7 +5,12 @@
 #include <ESPAsyncWebServer.h>
 #include <AsyncTCP.h>
 #include <SPIFFS.h>
+#include "USB.h"
+#include "USBCDC.h"
 #include "WiFiSettings.h"
+
+// External USB Serial instance
+extern USBCDC USBSerial;
 // #include "MotorControl.h"  // DEPRECATED: Motor control merged to UART1Mux
 
 // Forward declaration

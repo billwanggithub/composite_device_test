@@ -6,7 +6,7 @@ setlocal
 pushd %~dp0
 
 rem Forward all args to build_and_upload.ps1
-powershell -ExecutionPolicy RemoteSigned -File "%~dp0run.ps1" %*
+powershell -ExecutionPolicy RemoteSigned -File "%~dp0upload.ps1" %*
 set rc=%ERRORLEVEL%
 
 popd

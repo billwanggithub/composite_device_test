@@ -591,8 +591,16 @@
 
             // 發送命令
             if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(command);
+                console.log('[DEBUG] WebSocket 狀態: OPEN, 準備發送...');
+                try {
+                    ws.send(command);
+                    console.log('[DEBUG] 命令已發送到 WebSocket');
+                } catch (e) {
+                    console.error('[DEBUG] 發送失敗:', e);
+                    addConsoleLine('✗ 發送失敗: ' + e.message, 'error');
+                }
             } else {
+                console.log('[DEBUG] WebSocket 狀態異常, readyState=' + (ws ? ws.readyState : 'undefined'));
                 addConsoleLine('✗ 未連接到設備', 'error');
             }
 

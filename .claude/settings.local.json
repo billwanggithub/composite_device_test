@@ -34,7 +34,12 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "mcp__desktop-commander__write_file",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(timeout 10 pio device monitor:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(timeout 5 bash:*)",
+      "Bash(timeout 15 bash:*)",
+      "Bash(taskkill:*)"
     ],
     "deny": [],
     "ask": []
