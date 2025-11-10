@@ -222,32 +222,48 @@ void WebServerManager::handleWebSocketMessage(void *arg, uint8_t *data, size_t l
                 return;
             }
 
-            // 取得客戶端 ID（假設 info->num 是客戶端 ID）
+            Serial.printf("[WS] 文本命令: %s\n", trimmed.c_str());
+
+            // 取得客戶端 ID
             uint32_t client_id = info->num;
 
             // 創建 WebSocket 響應對象
             WebSocketResponse wsResponse((void*)ws, client_id);
 
             // 使用命令解析器處理命令
-            if (parser.processCommand(trimmed, &wsResponse, CMD_SOURCE_WEBSOCKET)) {
-                // 命令已處理，將響應發送回客戶端
-                String response = wsResponse.getResponse();
+            bool commandProcessed = parser.processCommand(trimmed, &wsResponse, CMD_SOURCE_WEBSOCKET);
 
-                // 獲取發送消息的客戶端
-                AsyncWebSocketClient* client = ws->client(client_id);
-                if (client) {
-                    client->text(response);
+            // 取得響應文本
+            String response = wsResponse.getResponse();
+
+            Serial.printf("[WS] 命令已處理: %s, 響應長度: %d\n",
+                         commandProcessed ? "是" : "否", response.length());
+
+            // 如果沒有響應，檢查是否是未知命令
+            if (response.length() == 0) {
+                if (!commandProcessed) {
+                    // 命令未識別
+                    response = "❌ 未知命令: " + trimmed;
+                    Serial.printf("[WS] 未知命令，發送錯誤消息\n");
+                } else {
+                    // 命令被處理但沒有響應（不應該發生）
+                    response = "✓ 命令已執行\n";
+                    Serial.printf("[WS] 命令被處理但沒有響應\n");
                 }
+            }
 
-                // 也廣播狀態更新
-                broadcastStatus();
+            // 發送響應給客戶端
+            AsyncWebSocketClient* client = ws->client(client_id);
+            if (client) {
+                Serial.printf("[WS] 發送響應到客戶端 %d: %d 字節\n", client_id, response.length());
+                client->text(response);
             } else {
-                // 命令未識別，發送錯誤消息
-                String error = "❌ 未知命令: " + trimmed;
-                AsyncWebSocketClient* client = ws->client(client_id);
-                if (client) {
-                    client->text(error);
-                }
+                Serial.printf("[WS] ❌ 找不到客戶端 %d\n", client_id);
+            }
+
+            // 廣播狀態更新
+            if (commandProcessed) {
+                broadcastStatus();
             }
         }
     }
