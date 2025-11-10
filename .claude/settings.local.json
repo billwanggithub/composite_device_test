@@ -33,7 +33,8 @@
       "Bash(else echo \"nul 檔案不存在\")",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "mcp__desktop-commander__write_file"
+      "mcp__desktop-commander__write_file",
+      "Bash(git log:*)"
     ],
     "deny": [],
     "ask": []

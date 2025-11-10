@@ -411,7 +411,17 @@
             });
 
             ws.addEventListener('message', function(event) {
-                addConsoleLine(event.data, 'response');
+                // 過濾掉自動廣播的 JSON 狀態消息
+                const message = event.data.trim();
+
+                // 跳過 JSON 格式的狀態廣播（以 { 開頭）
+                if (message.startsWith('{') && message.includes('"type":"status"')) {
+                    // 靜默處理狀態廣播，不顯示在控制台中
+                    return;
+                }
+
+                // 顯示其他消息（命令響應）
+                addConsoleLine(message, 'response');
                 messageCount++;
                 document.getElementById('messageCount').textContent = messageCount;
             });
