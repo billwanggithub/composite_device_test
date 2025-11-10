@@ -227,7 +227,7 @@ ESP32-S3 整合測試工具
 ✅ 找到 HID 裝置: TinyUSB HID
 
 === 掃描 BLE 介面 ===
-✅ 找到 BLE 裝置: ESP32_S3_Console
+✅ 找到 BLE 裝置: BillCat_Fan_Control
 
 ==========================================================
 開始測試回應路由規則
@@ -281,7 +281,7 @@ pip install bleak
 python scripts/ble_client.py --scan
 
 # 通過裝置名稱連接
-python scripts/ble_client.py --name ESP32_S3_Console
+python scripts/ble_client.py --name BillCat_Fan_Control
 
 # 通過 MAC 位址連接（如果已知）
 python scripts/ble_client.py --address XX:XX:XX:XX:XX:XX
@@ -293,7 +293,7 @@ Scanning for BLE devices (timeout: 8.0s)...
 ============================================================
 Found 5 device(s):
 ------------------------------------------------------------
-1. Name: ESP32_S3_Console
+1. Name: BillCat_Fan_Control
    Address: XX:XX:XX:XX:XX:XX
    RSSI: -45 dBm
 
@@ -678,7 +678,7 @@ python test_hid.py cmd *IDN?
 
 **測試 BLE 來源：**
 ```bash
-python scripts/ble_client.py --name ESP32_S3_Console
+python scripts/ble_client.py --name BillCat_Fan_Control
 # 連接後輸入：*IDN?
 ```
 預期：BLE 客戶端顯示 `HID_ESP32_S3`，CDC Monitor 無回應
@@ -980,7 +980,7 @@ ESP32-S3 整合測試工具
 ✅ 找到 HID 裝置: TinyUSB HID
 
 === 掃描 BLE 介面 ===
-✅ 找到 BLE 裝置: ESP32_S3_Console
+✅ 找到 BLE 裝置: BillCat_Fan_Control
 
 ==========================================================
 開始測試回應路由規則

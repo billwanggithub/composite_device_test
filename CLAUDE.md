@@ -406,7 +406,7 @@ The initialization order in `setup()` is critical:
 - `MultiChannelResponse` - For dual CDC+HID responses
 
 **3. BLE Initialization:**
-- `BLEDevice::init("ESP32_S3_Console")` - Initialize BLE stack
+- `BLEDevice::init("BillCat_Fan_Control")` - Initialize BLE stack
 - Create BLE Server with connection callbacks
 - Create BLE Service (custom UUID)
 - Create TX Characteristic (Notify property) - For sending data to client
@@ -655,7 +655,7 @@ Note: UART1 defaults to PWM/RPM mode on every power-up (non-persistent).
 **Important:** ESP32-S3 only supports BLE (Bluetooth Low Energy). Classic Bluetooth and SPP are not available on this chip.
 
 **Service Configuration:**
-- Device Name: `ESP32_S3_Console`
+- Device Name: `BillCat_Fan_Control`
 - Service UUID: `4fafc201-1fb5-459e-8fcc-c5c9c331914b`
 - TX Characteristic UUID: `beb5483e-36e1-4688-b7f5-ea07361b26a9` (Notify)
 - RX Characteristic UUID: `beb5483e-36e1-4688-b7f5-ea07361b26a8` (Write)
@@ -678,7 +678,7 @@ Note: UART1 defaults to PWM/RPM mode on every power-up (non-persistent).
 - Debug messages sent to CDC console when client connects/disconnects
 
 **BLE Client Usage:**
-1. Scan for device named "ESP32_S3_Console"
+1. Scan for device named "BillCat_Fan_Control"
 2. Connect to the device
 3. Discover service and characteristics using UUIDs above
 4. Enable notifications on TX Characteristic
@@ -718,7 +718,7 @@ The system provides comprehensive WiFi connectivity with web-based control inter
 #### Access Point Mode
 
 **Default Configuration:**
-- SSID: `ESP32_Motor_Control`
+- SSID: `BillCat_Fan_Control`
 - Password: `12345678`
 - IP Address: `192.168.4.1`
 - Subnet Mask: `255.255.255.0`
@@ -1024,6 +1024,34 @@ void loadWiFiSettings() {
 - Add firewall rules
 - Implement rate limiting
 
+### Web Console Features
+
+The web console (`/console.html`) provides a browser-based command interface with file operations:
+
+**Command Input/Output:**
+- Multi-line command input textarea
+- WebSocket-based real-time communication
+- Command history tracking
+- Syntax highlighting for responses
+
+**File Operations:**
+- **💾 儲存 (Save)**: Export command text to local file
+  - Browser "Save As" dialog allows custom filename
+  - Default filename: `commands.txt`
+  - Supported formats: `.txt`, `.cmd`
+  - UTF-8 text encoding
+
+- **📂 載入 (Load)**: Import commands from local file
+  - File picker dialog for selection
+  - Loads content into command input box
+  - Supports `.txt` and `.cmd` files
+  - Auto-focuses input after loading
+
+**Navigation:**
+- Console page accessible via direct URL: `/console.html`
+- Not included in main navigation (intentional for cleaner UI)
+- Full command support identical to CDC/HID/BLE interfaces
+
 ### Related Documentation
 
 For detailed implementation information, see:
@@ -1231,7 +1259,7 @@ For Windows development:
 **Usage:**
 ```bash
 # Connect by device name
-python scripts/ble_client.py --name ESP32_S3_Console
+python scripts/ble_client.py --name BillCat_Fan_Control
 
 # Connect by address (if known)
 python scripts/ble_client.py --address XX:XX:XX:XX:XX:XX

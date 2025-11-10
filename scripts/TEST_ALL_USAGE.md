@@ -66,7 +66,7 @@ python scripts/test_all.py help
 ### BLE 支援
 
 1. **自動掃描連接**
-   - 掃描名稱為 "ESP32_S3_Console" 的裝置
+   - 掃描名稱為 "BillCat_Fan_Control" 的裝置
    - 自動連接並設定通知
 
 2. **異步操作**
@@ -82,7 +82,7 @@ python scripts/test_all.py help
 ### 完整測試流程
 1. 掃描 CDC 介面（COM port）
 2. 掃描 HID 介面（VID/PID: 0x303A/0x1001）
-3. 掃描 BLE 介面（裝置名稱: ESP32_S3_Console）
+3. 掃描 BLE 介面（裝置名稱: BillCat_Fan_Control）
 4. 對每個命令執行測試：
    - `*IDN?` - 裝置識別
    - `INFO` - 詳細資訊

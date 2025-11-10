@@ -3,7 +3,7 @@ Simple BLE client for the project's BLE GATT "serial" console.
 
 Usage:
   python scripts/ble_client.py --scan                        # Scan for BLE devices
-  python scripts/ble_client.py --name ESP32_S3_Console       # Connect by name
+  python scripts/ble_client.py --name BillCat_Fan_Control    # Connect by name
   python scripts/ble_client.py --address AA:BB:CC:DD:EE:FF   # Connect by address
 
 The client will:

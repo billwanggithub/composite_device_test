@@ -178,7 +178,7 @@ Service UUID:        4fafc201-1fb5-459e-8fcc-c5c9c331914b
      用途:           客戶端 → 裝置（命令輸入）
 ```
 
-**裝置名稱：** `ESP32_S3_Console`
+**裝置名稱：** `BillCat_Fan_Control`
 
 ### 命令發送格式
 
@@ -242,7 +242,7 @@ async def receive_responses(address):
 ### 連線管理
 
 **連線流程：**
-1. 掃描 BLE 裝置（尋找 "ESP32_S3_Console"）
+1. 掃描 BLE 裝置（尋找 "BillCat_Fan_Control"）
 2. 連線到裝置
 3. 發現 Service 和 Characteristics
 4. 訂閱 TX Characteristic（啟用 Notify）
@@ -304,7 +304,7 @@ pip install bleak
 python scripts/ble_client.py --scan
 
 # 通過名稱連線
-python scripts/ble_client.py --name ESP32_S3_Console
+python scripts/ble_client.py --name BillCat_Fan_Control
 
 # 通過 MAC 位址連線
 python scripts/ble_client.py --address XX:XX:XX:XX:XX:XX
@@ -312,7 +312,7 @@ python scripts/ble_client.py --address XX:XX:XX:XX:XX:XX
 
 **行動裝置測試：**
 - 使用 nRF Connect app (Android/iOS)
-- 連線到 "ESP32_S3_Console"
+- 連線到 "BillCat_Fan_Control"
 - 啟用 TX Characteristic 的 Notify
 - 寫入命令到 RX Characteristic（記得加 `\n`）
 

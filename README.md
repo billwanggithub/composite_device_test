@@ -474,7 +474,7 @@ Delay completed
 啟用 WiFi 後，可透過以下方式存取 Web 控制面板：
 
 **AP 模式（預設啟用）：**
-- SSID：`ESP32_Motor_Control`
+- SSID：`BillCat_Fan_Control`
 - 密碼：`12345678`
 - IP 位址：`http://192.168.4.1`
 - Captive Portal：Android 裝置會自動開啟控制頁面
@@ -880,7 +880,7 @@ console instead: a writeable RX characteristic and a notify-only TX characterist
 - Service UUID: `4fafc201-1fb5-459e-8fcc-c5c9c331914b`
 - RX (write) UUID: `beb5483e-36e1-4688-b7f5-ea07361b26a8`
 - TX (notify) UUID: `beb5483e-36e1-4688-b7f5-ea07361b26a9`
-- Default BLE device name: `ESP32_S3_Console`
+- Default BLE device name: `BillCat_Fan_Control`
 
 A small Python test client that uses `bleak` is provided at `scripts/ble_client.py`.
 It will:
@@ -898,7 +898,7 @@ pip install bleak
 python scripts/ble_client.py --scan
 
 # Connect by device name
-python scripts/ble_client.py --name ESP32_S3_Console
+python scripts/ble_client.py --name BillCat_Fan_Control
 
 # Connect by address (if known)
 python scripts/ble_client.py --address XX:XX:XX:XX:XX:XX
@@ -912,7 +912,7 @@ You can manually test the BLE RX/TX console using the free nRF Connect mobile ap
 Follow these steps:
 
 1. Install nRF Connect from Google Play or the App Store.
-2. Open the app and start a scan. Look for the device named `ESP32_S3_Console` (or your device's configured name).
+2. Open the app and start a scan. Look for the device named `BillCat_Fan_Control` (or your device's configured name).
 3. Tap the device to connect.
 4. After connection expand the service with UUID `4fafc201-1fb5-459e-8fcc-c5c9c331914b`.
 5. Locate the TX characteristic (notify) with UUID `beb5483e-36e1-4688-b7f5-ea07361b26a9` and enable Notifications (tap the bell / subscribe icon).
