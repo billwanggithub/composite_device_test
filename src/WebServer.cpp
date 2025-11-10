@@ -187,6 +187,7 @@ void WebServerManager::handleWebSocketMessage(void *arg, uint8_t *data, size_t l
 
     USBSerial.printf("[WS] handleWebSocketMessage 已調用: final=%d, index=%d, info->len=%d, param_len=%d, opcode=%d\n",
                  info->final, info->index, info->len, len, info->opcode);
+    USBSerial.printf("[WS] DEBUG: client=%p, info->num=%d\n", client, info->num);
     USBSerial.flush();
 
     if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
@@ -253,9 +254,13 @@ void WebServerManager::handleWebSocketMessage(void *arg, uint8_t *data, size_t l
             USBSerial.printf("[WS] 修剪後: %s\n", trimmed.c_str());
             USBSerial.printf("[WS] 消息長度: %d\n", trimmed.length());
 
-            // 取得客戶端 ID
+            // 取得客戶端 ID (使用 AsyncWebSocket 的客戶端查詢方法)
             uint32_t client_id = client ? client->id() : 0;
-            USBSerial.printf("[WS] 客戶端 ID: %d\n", client_id);
+            if (client_id == 0 && info->num > 0) {
+                client_id = info->num;  // Fallback to info->num if client->id() returns 0
+                USBSerial.printf("[WS] 警告: client->id() 為 0, 改用 info->num=%d\n", client_id);
+            }
+            USBSerial.printf("[WS] 客戶端 ID: %d (client->id()=%u, info->num=%d)\n", client_id, client ? client->id() : 0, info->num);
 
             // 創建 WebSocket 響應對象
             WebSocketResponse wsResponse((void*)ws, client_id);

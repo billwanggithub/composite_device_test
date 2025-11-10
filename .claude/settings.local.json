@@ -39,7 +39,8 @@
       "Bash(powershell -Command:*)",
       "Bash(timeout 5 bash:*)",
       "Bash(timeout 15 bash:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(timeout 30 pio device monitor:*)"
     ],
     "deny": [],
     "ask": []
